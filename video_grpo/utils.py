@@ -193,28 +193,24 @@ def log_videos(
 def save_ckpt(
     cfg: Any,
     transformer: torch.nn.Module,
-    pipeline: Any,
     global_step: int,
     epoch: int,
     accelerator: Accelerator,
     ema: Optional[Any],
     transformer_params: List[torch.nn.Parameter],
     current_epoch_tag: int,
-    full_finetune: bool,
 ) -> None:
     """Save state, EMA, metadata, and unwrapped model checkpoint.
 
     Args:
         cfg: Training config.
         transformer: Potentially wrapped transformer being trained.
-        pipeline: Diffusion pipeline (for saving unwrapped).
         global_step: Current global step.
         epoch: Current epoch.
         accelerator: Accelerator for saving state.
         ema: EMA wrapper (may be None if disabled).
         transformer_params: List of trainable parameters for EMA swap.
         current_epoch_tag: Sampler epoch_tag for resume alignment.
-        full_finetune: Whether running full-parameter finetune.
     """
     save_root = os.path.join(
         cfg.paths.save_dir, "checkpoints", f"checkpoint-{global_step}"

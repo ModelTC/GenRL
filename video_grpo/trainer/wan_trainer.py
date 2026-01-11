@@ -30,7 +30,6 @@ from video_grpo.diffusers_patch.wan_pipeline_with_logprob import (
 from video_grpo.diffusers_patch.wan_prompt_embedding import encode_prompt
 from video_grpo.utils import (  # type: ignore
     build_accelerator,
-    unwrap_model,
     resolve_resume_checkpoint,
     log_videos,
     save_ckpt,
@@ -384,64 +383,6 @@ def sample_epoch(
     return samples
 
 
-def save_ckpt(
-    cfg: Config,
-    transformer: torch.nn.Module,
-    pipeline: WanPipeline,
-    global_step: int,
-    epoch: int,
-    accelerator: Accelerator,
-    ema: Optional[EMAModuleWrapper],
-    transformer_params: List[torch.nn.Parameter],
-    current_epoch_tag: int,
-    full_finetune: bool,
-) -> None:
-    """Save state, EMA, metadata, and unwrapped model checkpoint.
-
-    Args:
-        cfg: Training config.
-        transformer: Transformer being trained (may be wrapped).
-        pipeline: Diffusion pipeline for unwrapped export.
-        global_step: Current global step.
-        epoch: Current epoch.
-        accelerator: Accelerator handle.
-        ema: EMA helper.
-        transformer_params: Trainable params for EMA swap.
-        current_epoch_tag: Sampler epoch tag for precise resume.
-        full_finetune: Whether full-parameter finetune is active.
-
-    Returns:
-        None. Side effects: writes checkpoint to disk.
-    """
-    save_root = os.path.join(
-        cfg.paths.save_dir, "checkpoints", f"checkpoint-{global_step}"
-    )
-    os.makedirs(save_root, exist_ok=True)
-    metadata = {
-        "global_step": global_step,
-        "epoch": epoch,
-        "current_epoch_tag": current_epoch_tag,
-        "run_name": cfg.run_name,
-    }
-    accelerator.save_state(save_root)
-    if accelerator.is_main_process:
-        if cfg.train.ema:
-            torch.save(ema.state_dict(), os.path.join(save_root, "ema_state.pt"))
-
-        unwrap_dir = os.path.join(save_root, "unwrapped_model")
-        os.makedirs(unwrap_dir, exist_ok=True)
-
-        if cfg.train.ema:
-            ema.copy_ema_to(transformer_params, store_temp=True)
-        base_transformer = unwrap_model(transformer, accelerator)
-        transformer_dir = os.path.join(unwrap_dir, "transformer")
-        base_transformer.save_pretrained(transformer_dir)
-        with open(os.path.join(save_root, "metadata.json"), "w") as f:
-            json.dump(metadata, f)
-        if cfg.train.ema:
-            ema.copy_temp_to(transformer_params)
-
-
 def train(cfg: Config):
     """Main training loop for VideoGRPO.
 
@@ -696,14 +637,12 @@ def train(cfg: Config):
             save_ckpt(
                 cfg,
                 transformer,
-                pipeline,
                 global_step,
                 epoch,
                 accelerator,
                 ema,
                 transformer_params,
                 current_epoch_tag,
-                full_finetune,
             )
         accelerator.wait_for_everyone()
 
@@ -942,9 +881,19 @@ def train(cfg: Config):
                             0.5
                             * torch.mean((log_prob - sample["log_probs"][:, j]) ** 2)
                         )
-                        info["clipfrac"].append(
+                        info["clip_frac"].append(
                             torch.mean(
                                 (torch.abs(ratio - 1.0) > cfg.train.clip_range).float()
+                            )
+                        )
+                        info["clip_frac_gt_one"].append(
+                            torch.mean(
+                                (ratio - 1.0 > cfg.train.clip_range).float()
+                            )
+                        )
+                        info["clip_frac_lt_one"].append(
+                            torch.mean(
+                                (1.0 - ratio > cfg.train.clip_range).float()
                             )
                         )
                         info["policy_loss"].append(policy_loss)
