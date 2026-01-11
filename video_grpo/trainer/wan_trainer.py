@@ -423,8 +423,6 @@ def train(cfg: Config):
         )
     logger.info(f"\n{cfg}")
 
-    set_seed(cfg.seed, device_specific=True)
-
     with fast_init(accelerator.device, init_weights=False):
         pipeline = WanPipeline.from_pretrained(cfg.paths.pretrained_model)
     # mutually exclusive: use_lora -> LoRA path; otherwise full finetune
@@ -621,7 +619,7 @@ def train(cfg: Config):
     for epoch in range(first_epoch, cfg.num_epochs):
         pipeline.transformer.eval()
 
-        if epoch % cfg.eval_freq == 0 and epoch > 0:
+        if epoch % cfg.eval_freq == 0:
             eval_once(
                 cfg,
                 accelerator,
@@ -634,7 +632,16 @@ def train(cfg: Config):
                 autocast,
                 global_step,
             )
-        if epoch % cfg.save_freq == 0 and epoch > 0 and accelerator.is_main_process:
+        # Per-epoch seeding for reproducible sampling (e.g., when generator=None / same_latent=False or calculate step-wise log_prob during sampling)
+        set_seed(cfg.seed + epoch, device_specific=True)
+        if (
+            epoch % cfg.save_freq == 0
+            and epoch > 0
+            and accelerator.is_main_process
+            and not (
+                resume_path and epoch == first_epoch
+            )  # don't save checkpoint on resume from checkpoint
+        ):
             current_epoch_tag = epoch * cfg.sample.num_batches_per_epoch
             save_ckpt(
                 cfg,
