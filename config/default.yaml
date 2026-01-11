@@ -22,7 +22,7 @@ paths:
   logdir: logs/video_ocr
   save_dir: logs/video_ocr
   dataset: datasets/ocr
-  pretrained_model: /data/models/Wan2.1-T2V-1.3B
+  pretrained_model: /data/models/Wan2.1-T2V-1.3B-Diffusers
   resume_from: null
 sample:
   batch_size: 8
