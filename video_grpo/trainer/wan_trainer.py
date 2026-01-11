@@ -404,7 +404,7 @@ def train(cfg: Config):
         base_gas = total_chunks // 2 if total_chunks > 1 else 1
     cfg.train.gradient_accumulation_steps = base_gas
     accelerator_config = ProjectConfiguration(
-        project_dir=os.path.join(cfg.paths.logdir, cfg.run_name),
+        project_dir=os.path.join(cfg.paths.save_dir, cfg.run_name),
         automatic_checkpoint_naming=True,
         total_limit=cfg.num_checkpoint_limit,
     )
@@ -421,7 +421,7 @@ def train(cfg: Config):
             config=cfg.__dict__,
             init_kwargs={"wandb": {"name": cfg.run_name}},
         )
-    logger.info(f"\n{cfg}")
+        logger.info(f"\n{cfg}")
 
     with fast_init(accelerator.device, init_weights=False):
         pipeline = WanPipeline.from_pretrained(cfg.paths.pretrained_model)

@@ -86,6 +86,7 @@ result/
 *.mkv
 *.webm
 logs/
+wandb/
 
 # Data and JSON Files
 *.json

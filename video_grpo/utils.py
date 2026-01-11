@@ -159,7 +159,7 @@ def log_videos(
         rewards: Dict containing at least key 'avg'.
         step: Global step for logging.
     """
-    video_dir = os.path.join(cfg.paths.logdir, cfg.run_name, f"{tag}_videos")
+    video_dir = os.path.join(cfg.paths.save_dir, cfg.run_name, f"{tag}_videos")
     os.makedirs(video_dir, exist_ok=True)
     num_samples = min(15, len(videos))
     sample_indices = random.sample(range(len(videos)), num_samples)

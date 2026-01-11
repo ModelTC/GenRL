@@ -91,7 +91,6 @@ class SampleConfig:
 
 @dataclass
 class ProjectPaths:
-    logdir: str = "logs"
     save_dir: str = "logs/checkpoints"
     dataset: str = "dataset/ocr"
     pretrained_model: str = ""
@@ -181,7 +180,6 @@ def load_config(path: str) -> Config:
     cfg = build_dataclass(Config, data)
 
     # expand paths
-    cfg.paths.logdir = os.path.expanduser(cfg.paths.logdir)
     cfg.paths.save_dir = os.path.expanduser(cfg.paths.save_dir)
     cfg.paths.dataset = os.path.expanduser(cfg.paths.dataset)
     if cfg.paths.pretrained_model:
