@@ -36,6 +36,7 @@ from video_grpo.utils import (  # type: ignore
     save_ckpt,
     calculate_zero_std_ratio,
     create_generator,
+    fast_init,
 )
 
 tqdm = partial(tqdm.tqdm, dynamic_ncols=True)
@@ -483,7 +484,8 @@ def train(cfg: Config):
 
     set_seed(cfg.seed, device_specific=True)
 
-    pipeline = WanPipeline.from_pretrained(cfg.paths.pretrained_model)
+    with fast_init(accelerator.device, init_weights=False):
+        pipeline = WanPipeline.from_pretrained(cfg.paths.pretrained_model)
     # mutually exclusive: use_lora -> LoRA path; otherwise full finetune
     full_finetune = not cfg.use_lora
     ref_transformer = None
@@ -703,6 +705,7 @@ def train(cfg: Config):
                 current_epoch_tag,
                 full_finetune,
             )
+        accelerator.wait_for_everyone()
 
         samples = sample_epoch(
             cfg,

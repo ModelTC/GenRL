@@ -2,7 +2,8 @@ import os
 import random
 import json
 import hashlib
-from typing import Any, Dict, List, Optional, Tuple
+import contextlib
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import imageio
 import wandb
@@ -10,6 +11,43 @@ import numpy as np
 from accelerate import Accelerator, FullyShardedDataParallelPlugin, ProjectConfiguration
 from diffusers.utils.torch_utils import is_compiled_module
 import torch
+from torch.nn.utils import no_init_weights
+
+# fast init helpers
+_ORIGINAL_INITS: Dict[Type[torch.nn.Module], Any] = {
+    torch.nn.Linear: torch.nn.Linear.__init__,
+    torch.nn.Embedding: torch.nn.Embedding.__init__,
+    torch.nn.LayerNorm: torch.nn.LayerNorm.__init__,
+}
+
+
+def _get_fast_init(cls: Type[torch.nn.Module], device: torch.device):
+    assert cls in _ORIGINAL_INITS
+
+    def _fast_init(self, *args, **kwargs):
+        # Same as torch.nn.utils.skip_init, excluding checks
+        if "device" in kwargs:
+            kwargs.pop("device")
+        _ORIGINAL_INITS[cls](self, *args, **kwargs, device="meta")
+        self.to_empty(device=device)
+
+    return _fast_init
+
+
+@contextlib.contextmanager
+def fast_init(device: torch.device, init_weights: bool = False):
+    """
+    Avoid multiple slow CPU initializations by constructing modules on meta device,
+    then materializing on the target device.
+    """
+    for cls in _ORIGINAL_INITS:
+        cls.__init__ = _get_fast_init(cls, device)
+
+    with contextlib.nullcontext() if init_weights else no_init_weights():
+        yield
+
+    for cls in _ORIGINAL_INITS:
+        cls.__init__ = _ORIGINAL_INITS[cls]
 
 
 def build_accelerator(
