@@ -1,0 +1,92 @@
+run_name: wan_flow_grpo
+project_name: VideoRL
+seed: 42
+num_epochs: 100000
+eval_freq: 30
+save_freq: 60
+num_checkpoint_limit: 1
+height: 240
+width: 416
+frames: 33
+reward_fn:
+  video_ocr: 1.0
+eval_reward_fn: null
+reward_module: null
+eval_reward_module: null
+prompt_fn: general_ocr
+trainer: wan
+use_lora: true
+allow_tf32: true
+per_prompt_stat_tracking: true
+paths:
+  logdir: logs/video_ocr
+  save_dir: logs/video_ocr
+  dataset: datasets/ocr
+  pretrained_model: /data/models/Wan2.1-T2V-1.3B
+  resume_from: null
+sample:
+  batch_size: 8
+  eval_batch_size: 2
+  num_batches_per_epoch: 2
+  num_steps: 20
+  eval_num_steps: 50
+  guidance_scale: 4.5
+  eval_guidance_scale: 4.5
+  num_video_per_prompt: 4
+  kl_reward: 0
+  global_std: false
+  same_latent: false
+  noise_level: 0.7
+  sde_window_size: 2 # not used
+  sde_window_range: [0, 10] # not used
+  sde_type: null # not used
+train:
+  batch_size: 8
+  gradient_accumulation_steps: null  # auto: (num_batches_per_epoch * sample_time_per_prompt // 2) or 1
+  num_inner_epochs: 1
+  timestep_fraction: 0.99
+  beta: 0.004
+  learning_rate: 1.0e-4
+  clip_range: 1.0e-3
+  adv_clip_max: 5.0
+  max_grad_norm: 1.0
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_weight_decay: 0.0001
+  adam_epsilon: 1.0e-08
+  use_8bit_adam: false
+  ema: true
+  ema_decay: 0.9
+  ema_update_interval: 8
+  cfg: true
+  full_finetune: false
+  lora_path: null
+  lora_r: 32
+  lora_alpha: 64
+  lora_target_modules:
+    - add_k_proj
+    - add_q_proj
+    - add_v_proj
+    - to_add_out
+    - to_k
+    - to_out.0
+    - to_q
+    - to_v
+accelerate:
+  distributed_type: FSDP
+  mixed_precision: bf16
+  num_processes: 8
+  num_machines: 1
+  machine_rank: 0
+  fsdp_config:
+    fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
+    fsdp_backward_prefetch: BACKWARD_PRE
+    fsdp_forward_prefetch: true
+    fsdp_cpu_ram_efficient_loading: false
+    fsdp_offload_params: false
+    fsdp_sharding_strategy: FULL_SHARD
+    fsdp_state_dict_type: SHARDED_STATE_DICT
+    fsdp_sync_module_states: false
+    fsdp_use_orig_params: true
+    fsdp_activation_checkpointing: true
+
