@@ -7,16 +7,16 @@ import yaml
 
 @dataclass
 class FSDPConfig:
-    fsdp_auto_wrap_policy: str = "TRANSFORMER_BASED_WRAP"
-    fsdp_backward_prefetch: str = "BACKWARD_PRE"
-    fsdp_forward_prefetch: bool = True
-    fsdp_cpu_ram_efficient_loading: bool = False
-    fsdp_offload_params: bool = False
-    fsdp_sharding_strategy: str = "FULL_SHARD"
-    fsdp_state_dict_type: str = "SHARDED_STATE_DICT"
-    fsdp_sync_module_states: bool = False
-    fsdp_use_orig_params: bool = True
-    fsdp_activation_checkpointing: bool = True
+    auto_wrap_policy: str = "transformer_based_wrap"
+    backward_prefetch: str = "backward_pre"
+    forward_prefetch: bool = True
+    cpu_ram_efficient_loading: bool = False
+    cpu_offload: bool = False
+    sharding_strategy: str = "full_shard"
+    state_dict_type: str = "sharded_state_dict"
+    sync_module_states: bool = False
+    use_orig_params: bool = True
+    activation_checkpointing: bool = True
 
 
 @dataclass

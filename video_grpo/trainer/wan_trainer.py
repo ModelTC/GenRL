@@ -559,6 +559,8 @@ def train(cfg: Config):
     transformer, optimizer, test_dataloader = accelerator.prepare(
         transformer, optimizer, test_dataloader
     )
+    # Keep pipeline reference in sync with the wrapped (e.g., FSDP) model returned by accelerate.prepare
+    pipeline.transformer = transformer
     if ref_transformer is not None:
         ref_transformer = accelerator.prepare_model(
             ref_transformer, evaluation_mode=True
@@ -887,14 +889,10 @@ def train(cfg: Config):
                             )
                         )
                         info["clip_frac_gt_one"].append(
-                            torch.mean(
-                                (ratio - 1.0 > cfg.train.clip_range).float()
-                            )
+                            torch.mean((ratio - 1.0 > cfg.train.clip_range).float())
                         )
                         info["clip_frac_lt_one"].append(
-                            torch.mean(
-                                (1.0 - ratio > cfg.train.clip_range).float()
-                            )
+                            torch.mean((1.0 - ratio > cfg.train.clip_range).float())
                         )
                         info["policy_loss"].append(policy_loss)
                         if cfg.train.beta > 0:

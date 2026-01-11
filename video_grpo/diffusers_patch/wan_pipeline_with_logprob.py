@@ -6,7 +6,7 @@ from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepSchedu
 from diffusers.utils.torch_utils import randn_tensor
 import math
 import numpy as np
-from diffusers.pipelines.wan import WanPipelineOutput
+from diffusers.pipelines.wan.pipeline_output import WanPipelineOutput
 
 
 def sde_step_with_logprob(

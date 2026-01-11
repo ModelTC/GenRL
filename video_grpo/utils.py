@@ -8,10 +8,11 @@ from typing import Any, Dict, List, Optional, Tuple, Type
 import imageio
 import wandb
 import numpy as np
-from accelerate import Accelerator, FullyShardedDataParallelPlugin, ProjectConfiguration
+from accelerate import Accelerator, FullyShardedDataParallelPlugin
+from accelerate.utils import ProjectConfiguration
 from diffusers.utils.torch_utils import is_compiled_module
 import torch
-from torch.nn.utils import no_init_weights
+from transformers.modeling_utils import no_init_weights
 
 # fast init helpers
 _ORIGINAL_INITS: Dict[Type[torch.nn.Module], Any] = {
