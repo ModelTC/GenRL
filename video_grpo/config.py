@@ -87,6 +87,8 @@ class SampleConfig:
     sde_window_size: Optional[int] = None
     sde_window_range: Optional[Any] = None
     sde_type: Optional[str] = "flow_sde"  # 'flow_sde' or 'flow_cps'
+    diffusion_clip: bool = False
+    diffusion_clip_value: float = 0.45
 
 
 @dataclass

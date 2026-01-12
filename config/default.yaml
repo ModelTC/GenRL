@@ -39,6 +39,8 @@ sample:
   sde_window_size: 2 # not used
   sde_window_range: [0, 10] # not used
   sde_type: flow_sde  # 'flow_sde' or 'flow_cps'
+  diffusion_clip: false
+  diffusion_clip_value: 0.45
 train:
   batch_size: 8
   gradient_accumulation_steps: null  # auto: (num_batches_per_epoch * sample_time_per_prompt // 2) or 1

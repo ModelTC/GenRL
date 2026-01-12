@@ -20,6 +20,8 @@ def sde_step_with_logprob(
     sde_type: Optional[str] = "flow_sde",
     determistic: bool = False,
     return_sqrt_dt_and_std_dev_t: bool = False,
+    diffusion_clip: bool = False,
+    diffusion_clip_value: float = 0.45,
 ):
     """
     Predict the sample from the previous timestep by reversing the SDE.
@@ -35,6 +37,8 @@ def sde_step_with_logprob(
         sde_type: Type of SDE, either 'flow_sde' or 'flow_cps'.
         determistic: If True, no noise added (deterministic update).
         return_sqrt_dt_and_std_dev_t: If True, also return std_dev_t and sqrt(-dt).
+        diffusion_clip: If True, clip the std_dev_t to the diffusion_clip_value.
+        diffusion_clip_value: Value to clip the std_dev_t to.
 
     Returns:
         If return_sqrt_dt_and_std_dev_t:
@@ -71,6 +75,10 @@ def sde_step_with_logprob(
             )
             * noise_level
         )
+
+        if diffusion_clip and std_dev_t * torch.sqrt(-1 * dt) > diffusion_clip_value:
+            # https://arxiv.org/pdf/2510.22200: trucated noise schedule for flow_sde
+            std_dev_t = diffusion_clip_value / torch.sqrt(-1 * dt)
 
         prev_sample_mean = (
             sample * (1 + std_dev_t**2 / (2 * sigma) * dt)
@@ -164,6 +172,8 @@ def wan_pipeline_with_logprob(
     kl_reward: float = 0.0,
     noise_level: float = 0.7,
     sde_type: Optional[str] = "flow_sde",
+    diffusion_clip: bool = False,
+    diffusion_clip_value: float = 0.45,
 ):
     if isinstance(callback_on_step_end, (PipelineCallback, MultiPipelineCallbacks)):
         callback_on_step_end_tensor_inputs = callback_on_step_end.tensor_inputs
@@ -281,6 +291,8 @@ def wan_pipeline_with_logprob(
                 noise_level=noise_level,
                 sde_type=sde_type,
                 determistic=determistic,
+                diffusion_clip=diffusion_clip,
+                diffusion_clip_value=diffusion_clip_value,
             )
             prev_latents = latents.clone()
 
@@ -347,6 +359,8 @@ def wan_pipeline_with_logprob(
                     sde_type=sde_type,
                     prev_sample=prev_latents.float(),
                     determistic=determistic,
+                    diffusion_clip=diffusion_clip,
+                    diffusion_clip_value=diffusion_clip_value,
                 )
                 assert std_dev_t == ref_std_dev_t
                 kl = (prev_latents_mean - ref_prev_latents_mean) ** 2 / (

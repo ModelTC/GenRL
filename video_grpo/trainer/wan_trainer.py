@@ -129,6 +129,8 @@ def compute_log_prob(
         noise_level=cfg.sample.noise_level,
         prev_sample=sample["next_latents"][:, j].float(),
         sde_type=cfg.sample.sde_type,
+        diffusion_clip=cfg.sample.diffusion_clip,
+        diffusion_clip_value=cfg.sample.diffusion_clip_value,
         return_sqrt_dt_and_std_dev_t=True,
     )
     return prev_sample, log_prob, prev_sample_mean, std_dev_t, dt_sqrt
@@ -205,6 +207,8 @@ def eval_once(
                     determistic=True,
                     noise_level=cfg.sample.noise_level,
                     sde_type=cfg.sample.sde_type,
+                    diffusion_clip=cfg.sample.diffusion_clip,
+                    diffusion_clip_value=cfg.sample.diffusion_clip_value,
                 )
         rewards_eval, reward_meta = eval_reward_fn(
             videos_eval, test_prompts, test_metadata, False
@@ -336,6 +340,8 @@ def sample_epoch(
                     generator=generator,
                     noise_level=cfg.sample.noise_level,
                     sde_type=cfg.sample.sde_type,
+                    diffusion_clip=cfg.sample.diffusion_clip,
+                    diffusion_clip_value=cfg.sample.diffusion_clip_value,
                 )
 
             latents = torch.stack(latents, dim=1)
