@@ -142,6 +142,8 @@ def eval_once(
     eval_reward_fn: Callable,
     autocast: Any,
     global_step: int,
+    ema: Any | None,
+    transformer_params: List[torch.nn.Parameter] | None,
 ):
     """Full eval loop aligned to original behavior: iterate all batches, log rewards/videos.
 
@@ -156,11 +158,15 @@ def eval_once(
         eval_reward_fn: Reward function for eval.
         autocast: Autocast context manager.
         global_step: Current global step for logging.
+        ema: EMA module wrapper.
+        transformer_params: List of transformer parameters.
 
     Returns:
         None. Logs metrics/videos to accelerator.
     """
     set_seed(cfg.seed, device_specific=True)
+    if cfg.train.ema and ema is not None and transformer_params is not None:
+        ema.copy_ema_to(transformer_params, store_temp=True)
     all_rewards = defaultdict(list)
     last_batch = None
     eval_guidance = (
@@ -209,15 +215,17 @@ def eval_once(
 
     # concat and log
     all_rewards = {k: np.concatenate(v) for k, v in all_rewards.items()}
-    accelerator.log(
-        {
-            **{
-                f"eval_reward_{k}": np.mean(v[v != -10]) for k, v in all_rewards.items()
-            },
-        },
-        step=global_step,
-    )
     if accelerator.is_main_process:
+        accelerator.log(
+            {
+                **{
+                    f"eval_reward_{k}": np.mean(v[v != -10])
+                    for k, v in all_rewards.items()
+                },
+            },
+            step=global_step,
+        )
+        logger.info(f"Eval rewards: {all_rewards}")
         videos_eval, test_prompts, rewards_eval, _ = last_batch
         log_videos(
             "eval",
@@ -228,6 +236,10 @@ def eval_once(
             rewards_eval,
             global_step,
         )
+    # wait for all processes to finish
+    accelerator.wait_for_everyone()
+    if cfg.train.ema and ema is not None and transformer_params is not None:
+        ema.copy_temp_to(transformer_params)
 
 
 def sample_epoch(
@@ -483,7 +495,10 @@ def train(cfg: Config):
             )
 
     transformer = pipeline.transformer
-    transformer.enable_gradient_checkpointing()
+    # Avoid PyTorch checkpoint tensor-count mismatch by using non-reentrant mode.
+    transformer.gradient_checkpointing_enable(
+        gradient_checkpointing_kwargs={"use_reentrant": False}
+    )
     trainable_modules = [transformer]
     if full_finetune:
         trainable_modules.extend([pipeline.vae, pipeline.text_encoder])
@@ -632,6 +647,8 @@ def train(cfg: Config):
                 eval_reward_fn,
                 autocast,
                 global_step,
+                ema,
+                transformer_params,
             )
         # Per-epoch seeding for reproducible sampling (e.g., when generator=None / same_latent=False or calculate step-wise log_prob during sampling)
         set_seed(cfg.seed + epoch, device_specific=True)
