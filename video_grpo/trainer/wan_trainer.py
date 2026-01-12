@@ -236,8 +236,6 @@ def eval_once(
             rewards_eval,
             global_step,
         )
-    # wait for all processes to finish
-    accelerator.wait_for_everyone()
     if cfg.train.ema and ema is not None and transformer_params is not None:
         ema.copy_temp_to(transformer_params)
 
@@ -495,10 +493,7 @@ def train(cfg: Config):
             )
 
     transformer = pipeline.transformer
-    # Avoid PyTorch checkpoint tensor-count mismatch by using non-reentrant mode.
-    transformer.gradient_checkpointing_enable(
-        gradient_checkpointing_kwargs={"use_reentrant": False}
-    )
+    transformer.enable_gradient_checkpointing()
     trainable_modules = [transformer]
     if full_finetune:
         trainable_modules.extend([pipeline.vae, pipeline.text_encoder])
