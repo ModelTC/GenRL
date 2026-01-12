@@ -62,6 +62,7 @@ train:
   cfg: true
   full_finetune: false
   lora_path: null
+  loss_reweighting: null
   lora_r: 32
   lora_alpha: 64
   lora_target_modules:

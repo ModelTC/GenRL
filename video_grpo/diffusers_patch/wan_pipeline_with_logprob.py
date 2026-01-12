@@ -42,9 +42,9 @@ def sde_step_with_logprob(
 
     Returns:
         If return_sqrt_dt_and_std_dev_t:
-            (prev_sample, log_prob, prev_sample_mean, std_dev_t, sqrt_neg_dt)
+            (prev_sample, log_prob, prev_sample_mean, std_dev_t, sqrt_neg_dt, sigma, sigma_max)
         else:
-            (prev_sample, log_prob, prev_sample_mean, std_dev_t * sqrt_neg_dt)
+            (prev_sample, log_prob, prev_sample_mean, std_dev_t * sqrt_neg_dt, sigma, sigma_max)
     """
     model_output = model_output.float()
     sample = sample.float()
@@ -140,8 +140,23 @@ def sde_step_with_logprob(
     log_prob = log_prob.mean(dim=tuple(range(1, log_prob.ndim)))
 
     if return_sqrt_dt_and_std_dev_t:
-        return prev_sample, log_prob, prev_sample_mean, std_dev_t, torch.sqrt(-1 * dt)
-    return prev_sample, log_prob, prev_sample_mean, std_dev_t * torch.sqrt(-1 * dt)
+        return (
+            prev_sample,
+            log_prob,
+            prev_sample_mean,
+            std_dev_t,
+            torch.sqrt(-1 * dt),
+            sigma,
+            sigma_max,
+        )
+    return (
+        prev_sample,
+        log_prob,
+        prev_sample_mean,
+        std_dev_t * torch.sqrt(-1 * dt),
+        sigma,
+        sigma_max,
+    )
 
 
 def wan_pipeline_with_logprob(
@@ -283,7 +298,14 @@ def wan_pipeline_with_logprob(
                 )[0]
                 noise_pred = noise_uncond + guidance_scale * (noise_pred - noise_uncond)
 
-            latents, log_prob, prev_latents_mean, std_dev_t = sde_step_with_logprob(
+            (
+                latents,
+                log_prob,
+                prev_latents_mean,
+                std_dev_t,
+                sigma,
+                sigma_max,
+            ) = sde_step_with_logprob(
                 self.scheduler,
                 noise_pred.float(),
                 t.unsqueeze(0),
@@ -350,6 +372,8 @@ def wan_pipeline_with_logprob(
                     ref_log_prob,
                     ref_prev_latents_mean,
                     ref_std_dev_t,
+                    ref_sigma,
+                    ref_sigma_max,
                 ) = sde_step_with_logprob(
                     self.scheduler,
                     noise_pred.float(),

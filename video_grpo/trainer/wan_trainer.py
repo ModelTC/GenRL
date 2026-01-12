@@ -78,7 +78,15 @@ def compute_log_prob(
     negative_embeds: Optional[torch.Tensor],
     cfg: Config,
     attention_kwargs: Optional[Dict[str, Any]] = None,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    float,
+]:
     """Run one diffusion step and return prev_sample stats and log prob.
 
     Args:
@@ -92,7 +100,7 @@ def compute_log_prob(
         attention_kwargs: Optional attention kwargs override.
 
     Returns:
-        Tuple (prev_sample, log_prob, prev_sample_mean, std_dev_t, dt_sqrt).
+        Tuple (prev_sample, log_prob, prev_sample_mean, std_dev_t, dt_sqrt, sigma, sigma_max).
     """
     attention_kwargs = attention_kwargs or getattr(cfg, "attention_kwargs", None)
     if cfg.train.cfg:
@@ -121,7 +129,15 @@ def compute_log_prob(
             return_dict=False,
         )[0]
 
-    prev_sample, log_prob, prev_sample_mean, std_dev_t, dt_sqrt = sde_step_with_logprob(
+    (
+        prev_sample,
+        log_prob,
+        prev_sample_mean,
+        std_dev_t,
+        dt_sqrt,
+        sigma,
+        sigma_max,
+    ) = sde_step_with_logprob(
         pipeline.scheduler,
         noise_pred.float(),
         sample["timesteps"][:, j],
@@ -133,7 +149,7 @@ def compute_log_prob(
         diffusion_clip_value=cfg.sample.diffusion_clip_value,
         return_sqrt_dt_and_std_dev_t=True,
     )
-    return prev_sample, log_prob, prev_sample_mean, std_dev_t, dt_sqrt
+    return prev_sample, log_prob, prev_sample_mean, std_dev_t, dt_sqrt, sigma, sigma_max
 
 
 def eval_once(
@@ -909,6 +925,8 @@ def train(cfg: Config):
                                     prev_sample_mean_ref,
                                     std_dev_t_ref,
                                     dt_sqrt_ref,
+                                    sigma_ref,
+                                    sigma_max_ref,
                                 ) = compute_log_prob(
                                     ref_model,
                                     pipeline,
@@ -928,6 +946,8 @@ def train(cfg: Config):
                                         prev_sample_mean_ref,
                                         std_dev_t_ref,
                                         dt_sqrt_ref,
+                                        sigma_ref,
+                                        sigma_max_ref,
                                     ) = compute_log_prob(
                                         transformer,
                                         pipeline,
@@ -948,6 +968,8 @@ def train(cfg: Config):
                                 prev_sample_mean,
                                 std_dev_t,
                                 dt_sqrt,
+                                sigma,
+                                sigma_max,
                             ) = compute_log_prob(
                                 transformer,
                                 pipeline,
@@ -974,6 +996,32 @@ def train(cfg: Config):
                             torch.maximum(unclipped_loss, clipped_loss)
                         )
 
+                        reweight_scale = 1.0
+                        reweight_scale_kl = 1.0
+                        if (
+                            cfg.train.loss_reweighting == "longcat"
+                            and cfg.sample.sde_type == "flow_sde"
+                        ):
+                            reweight_scale = (
+                                torch.sqrt(
+                                    sigma
+                                    / (
+                                        1
+                                        - torch.where(
+                                            sigma == 1,
+                                            torch.tensor(
+                                                sigma_max,
+                                                device=sigma.device,
+                                                dtype=sigma.dtype,
+                                            ),
+                                            sigma,
+                                        )
+                                    )
+                                )
+                                / dt_sqrt
+                            )
+                            reweight_scale_kl = reweight_scale**2
+
                         if cfg.train.beta > 0:
                             if cfg.sample.sde_type == "flow_sde":
                                 kl_denom = (std_dev_t * dt_sqrt_ref) ** 2
@@ -987,9 +1035,12 @@ def train(cfg: Config):
                                 (prev_sample_mean - prev_sample_mean_ref) ** 2
                             ).mean(dim=(1, 2, 3), keepdim=True) / (2 * kl_denom)
                             kl_loss = torch.mean(kl_loss)
-                            loss = policy_loss + cfg.train.beta * kl_loss
+                            loss = (
+                                reweight_scale * policy_loss
+                                + cfg.train.beta * kl_loss * reweight_scale_kl
+                            )
                         else:
-                            loss = policy_loss
+                            loss = reweight_scale * policy_loss
 
                         info["approx_kl"].append(
                             0.5

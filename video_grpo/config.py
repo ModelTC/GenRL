@@ -53,6 +53,7 @@ class TrainConfig:
     cfg: bool = True
     full_finetune: bool = False
     lora_path: Optional[str] = None
+    loss_reweighting: Optional[str] = None
     # LoRA hyperparams
     lora_r: int = 32
     lora_alpha: int = 64
