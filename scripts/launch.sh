@@ -2,6 +2,7 @@
 set -e
 
 export TOKENIZERS_PARALLELISM=false
+export NCCL_TIMEOUT=18000
 CONFIG_PATH=${1:-config/default.yaml}
 
 accelerate launch \

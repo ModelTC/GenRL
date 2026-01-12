@@ -236,19 +236,32 @@ def save_ckpt(
         )
         torch.save(ema.state_dict(), ema_path)
 
+    # Synchronize all processes before unwrapping and saving model
+    # This is critical in FSDP environments to avoid NCCL timeout
+    accelerator.wait_for_everyone()
+
     if accelerator.is_main_process:
         unwrap_dir = os.path.join(save_root, "unwrapped_model")
         os.makedirs(unwrap_dir, exist_ok=True)
 
         if cfg.train.ema:
             ema.copy_ema_to(transformer_params, store_temp=True)
+
+        # Unwrap model - this may trigger FSDP unshard, so ensure all processes are ready
         base_transformer = unwrap_model(transformer, accelerator)
         transformer_dir = os.path.join(unwrap_dir, "transformer")
+
+        # Save model - even after unwrap, PEFT's save_pretrained may trigger FSDP unshard
+        # if the underlying model still has FSDP-wrapped submodules
+        # Ensure all processes are synchronized before save_pretrained
         base_transformer.save_pretrained(transformer_dir)
+
         with open(os.path.join(save_root, "metadata.json"), "w") as f:
             json.dump(metadata, f)
         if cfg.train.ema:
             ema.copy_temp_to(transformer_params)
+
+    # Synchronize after saving to ensure all processes complete
     accelerator.wait_for_everyone()
 
 

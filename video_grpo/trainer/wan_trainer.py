@@ -339,6 +339,9 @@ def sample_epoch(
                 prompts, base_seed=epoch * 10000 + i, device=accelerator.device
             )
 
+        # Synchronize all processes before pipeline call to avoid NCCL timeout
+        accelerator.wait_for_everyone()
+
         with autocast():
             with torch.no_grad():
                 videos, latents, log_probs, kls = wan_pipeline_with_logprob(
@@ -434,6 +437,8 @@ def train(cfg: Config):
     """
     unique_id = datetime.datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
     cfg.run_name = cfg.run_name + "_" + unique_id if cfg.run_name else unique_id
+    # Add run_name (with timestamp) as subdirectory to save_dir: logs/video_ocr -> logs/video_ocr/wan_flow_grpo_2026.01.12_21.48.08
+    cfg.paths.save_dir = os.path.join(cfg.paths.save_dir, cfg.run_name)
     resume_path = resolve_resume_checkpoint(getattr(cfg.paths, "resume_from", None))
 
     num_train_timesteps = int(cfg.sample.num_steps * cfg.train.timestep_fraction)
@@ -443,9 +448,10 @@ def train(cfg: Config):
         total_chunks = cfg.sample.num_batches_per_epoch
         base_gas = total_chunks // 2 if total_chunks > 1 else 1
     cfg.train.gradient_accumulation_steps = base_gas
+    # Use save_dir directly as project_dir, no run_name subdirectory
     accelerator_config = ProjectConfiguration(
-        project_dir=os.path.join(cfg.paths.save_dir, cfg.run_name),
-        automatic_checkpoint_naming=True,
+        project_dir=cfg.paths.save_dir,
+        automatic_checkpoint_naming=False,  # Disable automatic checkpointing - we use save_ckpt instead
         total_limit=cfg.num_checkpoint_limit,
     )
     train_timesteps = [step_index for step_index in range(num_train_timesteps)]

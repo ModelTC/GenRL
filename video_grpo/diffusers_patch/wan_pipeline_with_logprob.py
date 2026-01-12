@@ -405,17 +405,29 @@ def wan_pipeline_with_logprob(
     self._current_timestep = None
 
     if not output_type == "latent":
-        latents = latents.to(self.vae.dtype)
+        # Ensure latents are on the correct device and dtype
+        device = next(self.vae.parameters()).device
+        latents = latents.to(device=device, dtype=self.vae.dtype)
+
         latents_mean = (
             torch.tensor(self.vae.config.latents_mean)
             .view(1, self.vae.config.z_dim, 1, 1, 1)
-            .to(latents.device, latents.dtype)
+            .to(device=device, dtype=latents.dtype)
         )
         latents_std = 1.0 / torch.tensor(self.vae.config.latents_std).view(
             1, self.vae.config.z_dim, 1, 1, 1
-        ).to(latents.device, latents.dtype)
+        ).to(device=device, dtype=latents.dtype)
         latents = latents / latents_std + latents_mean
-        video = self.vae.decode(latents, return_dict=False)[0]
+
+        # VAE decode - ensure it's not wrapped in FSDP to avoid synchronization issues
+        # Use eval mode and disable gradients to prevent FSDP from tracking this operation
+        vae_was_training = self.vae.training
+        self.vae.eval()
+        with torch.no_grad():
+            video = self.vae.decode(latents, return_dict=False)[0]
+        if vae_was_training:
+            self.vae.train()
+
         video = self.video_processor.postprocess_video(video, output_type=output_type)
     else:
         video = latents
