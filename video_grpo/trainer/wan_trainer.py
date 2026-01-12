@@ -126,7 +126,9 @@ def compute_log_prob(
         noise_pred.float(),
         sample["timesteps"][:, j],
         sample["latents"][:, j].float(),
+        noise_level=cfg.sample.noise_level,
         prev_sample=sample["next_latents"][:, j].float(),
+        sde_type=cfg.sample.sde_type,
         return_sqrt_dt_and_std_dev_t=True,
     )
     return prev_sample, log_prob, prev_sample_mean, std_dev_t, dt_sqrt
@@ -201,6 +203,8 @@ def eval_once(
                     height=cfg.height,
                     width=cfg.width,
                     determistic=True,
+                    noise_level=cfg.sample.noise_level,
+                    sde_type=cfg.sample.sde_type,
                 )
         rewards_eval, reward_meta = eval_reward_fn(
             videos_eval, test_prompts, test_metadata, False
@@ -330,6 +334,8 @@ def sample_epoch(
                     width=cfg.width,
                     kl_reward=cfg.sample.kl_reward,
                     generator=generator,
+                    noise_level=cfg.sample.noise_level,
+                    sde_type=cfg.sample.sde_type,
                 )
 
             latents = torch.stack(latents, dim=1)
@@ -963,11 +969,17 @@ def train(cfg: Config):
                         )
 
                         if cfg.train.beta > 0:
+                            if cfg.sample.sde_type == "flow_sde":
+                                kl_denom = (std_dev_t * dt_sqrt_ref) ** 2
+                            elif cfg.sample.sde_type == "flow_cps":
+                                kl_denom = 1 / 2
+                            else:
+                                raise ValueError(
+                                    f"Unknown sde_type: {cfg.sample.sde_type}. Must be 'flow_sde' or 'flow_cps'."
+                                )
                             kl_loss = (
                                 (prev_sample_mean - prev_sample_mean_ref) ** 2
-                            ).mean(dim=(1, 2, 3), keepdim=True) / (
-                                2 * (std_dev_t * dt_sqrt_ref) ** 2
-                            )
+                            ).mean(dim=(1, 2, 3), keepdim=True) / (2 * kl_denom)
                             kl_loss = torch.mean(kl_loss)
                             loss = policy_loss + cfg.train.beta * kl_loss
                         else:

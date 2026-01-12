@@ -83,10 +83,10 @@ class SampleConfig:
     kl_reward: float = 0.0
     global_std: bool = False
     same_latent: bool = False
-    noise_level: Optional[float] = None
+    noise_level: Optional[float] = 0.7
     sde_window_size: Optional[int] = None
     sde_window_range: Optional[Any] = None
-    sde_type: Optional[str] = None
+    sde_type: Optional[str] = "flow_sde"  # 'flow_sde' or 'flow_cps'
 
 
 @dataclass
