@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
+export TOKENIZERS_PARALLELISM=false
 CONFIG_PATH=${1:-config/default.yaml}
 
 accelerate launch \

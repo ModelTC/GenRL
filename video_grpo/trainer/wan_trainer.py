@@ -91,7 +91,7 @@ def compute_log_prob(
         attention_kwargs: Optional attention kwargs override.
 
     Returns:
-        Tuple (prev_sample, log_prob, prev_sample_mean, std_dev_t, dt).
+        Tuple (prev_sample, log_prob, prev_sample_mean, std_dev_t, dt_sqrt).
     """
     attention_kwargs = attention_kwargs or getattr(cfg, "attention_kwargs", None)
     if cfg.train.cfg:
@@ -120,15 +120,15 @@ def compute_log_prob(
             return_dict=False,
         )[0]
 
-    prev_sample, log_prob, prev_sample_mean, std_dev_t, dt = sde_step_with_logprob(
+    prev_sample, log_prob, prev_sample_mean, std_dev_t, dt_sqrt = sde_step_with_logprob(
         pipeline.scheduler,
         noise_pred.float(),
         sample["timesteps"][:, j],
         sample["latents"][:, j].float(),
         prev_sample=sample["next_latents"][:, j].float(),
-        return_dt_and_std_dev_t=True,
+        return_sqrt_dt_and_std_dev_t=True,
     )
-    return prev_sample, log_prob, prev_sample_mean, std_dev_t, dt
+    return prev_sample, log_prob, prev_sample_mean, std_dev_t, dt_sqrt
 
 
 def eval_once(
@@ -600,21 +600,22 @@ def train(cfg: Config):
         * cfg.train.gradient_accumulation_steps
     )
 
-    logger.info(
-        "\n".join(
-            [
-                "***** Running training *****",
-                f"  Num Epochs = {cfg.num_epochs}",
-                f"  Sample batch size per device = {cfg.sample.batch_size}",
-                f"  Train batch size per device = {cfg.train.batch_size}",
-                f"  Gradient Accumulation steps = {cfg.train.gradient_accumulation_steps}",
-                f"  Total number of samples per epoch = {samples_per_epoch}",
-                f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size}",
-                f"  Number of gradient updates per inner epoch = {samples_per_epoch // total_train_batch_size}",
-                f"  Number of inner epochs = {cfg.train.num_inner_epochs}",
-            ]
+    if accelerator.is_main_process:
+        logger.info(
+            "\n".join(
+                [
+                    "***** Running training *****",
+                    f"  Num Epochs = {cfg.num_epochs}",
+                    f"  Sample batch size per device = {cfg.sample.batch_size}",
+                    f"  Train batch size per device = {cfg.train.batch_size}",
+                    f"  Gradient Accumulation steps = {cfg.train.gradient_accumulation_steps}",
+                    f"  Total number of samples per epoch = {samples_per_epoch}",
+                    f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size}",
+                    f"  Number of gradient updates per inner epoch = {samples_per_epoch // total_train_batch_size}",
+                    f"  Number of inner epochs = {cfg.train.num_inner_epochs}",
+                ]
+            )
         )
-    )
 
     for epoch in range(first_epoch, cfg.num_epochs):
         pipeline.transformer.eval()
@@ -805,16 +806,20 @@ def train(cfg: Config):
                 ):
                     with accelerator.accumulate(transformer):
                         with autocast():
-                            prev_sample, log_prob, prev_sample_mean, std_dev_t, dt = (
-                                compute_log_prob(
-                                    transformer,
-                                    pipeline,
-                                    sample,
-                                    j,
-                                    embeds,
-                                    negative_embeds,
-                                    cfg,
-                                )
+                            (
+                                prev_sample,
+                                log_prob,
+                                prev_sample_mean,
+                                std_dev_t,
+                                dt_sqrt,
+                            ) = compute_log_prob(
+                                transformer,
+                                pipeline,
+                                sample,
+                                j,
+                                embeds,
+                                negative_embeds,
+                                cfg,
                             )
                             if cfg.train.beta > 0:
                                 if full_finetune:
@@ -830,7 +835,7 @@ def train(cfg: Config):
                                             log_prob_ref,
                                             prev_sample_mean_ref,
                                             std_dev_t_ref,
-                                            dt_ref,
+                                            dt_sqrt_ref,
                                         ) = compute_log_prob(
                                             ref_model,
                                             pipeline,
@@ -848,7 +853,7 @@ def train(cfg: Config):
                                                 log_prob_ref,
                                                 prev_sample_mean_ref,
                                                 std_dev_t_ref,
-                                                dt_ref,
+                                                dt_sqrt_ref,
                                             ) = compute_log_prob(
                                                 transformer,
                                                 pipeline,
@@ -879,7 +884,7 @@ def train(cfg: Config):
                             kl_loss = (
                                 (prev_sample_mean - prev_sample_mean_ref) ** 2
                             ).mean(dim=(1, 2, 3), keepdim=True) / (
-                                2 * (std_dev_t * dt_ref) ** 2
+                                2 * (std_dev_t * dt_sqrt_ref) ** 2
                             )
                             kl_loss = torch.mean(kl_loss)
                             loss = policy_loss + cfg.train.beta * kl_loss

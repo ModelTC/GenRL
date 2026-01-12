@@ -1,12 +1,12 @@
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union, Tuple
 import torch
 import contextlib
 from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
 from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepScheduler
 from diffusers.utils.torch_utils import randn_tensor
+from diffusers.pipelines.wan import WanPipelineOutput
 import math
 import numpy as np
-from diffusers.pipelines.wan.pipeline_output import WanPipelineOutput
 
 
 def sde_step_with_logprob(
@@ -17,8 +17,27 @@ def sde_step_with_logprob(
     prev_sample: Optional[torch.FloatTensor] = None,
     generator: Optional[torch.Generator] = None,
     determistic: bool = False,
-    return_dt_and_std_dev_t: bool = False,
+    return_sqrt_dt_and_std_dev_t: bool = False,
 ):
+    """
+    Predict the sample from the previous timestep by reversing the SDE.
+
+    Args:
+        self: Scheduler.
+        model_output: Predicted noise/velocity.
+        timestep: Current timestep(s).
+        sample: Current latents.
+        prev_sample: Optional precomputed previous sample (mutually exclusive with generator).
+        generator: Optional RNG for sampling prev_sample.
+        determistic: If True, no noise added (deterministic update).
+        return_sqrt_dt_and_std_dev_t: If True, also return std_dev_t and sqrt(-dt).
+
+    Returns:
+        If return_sqrt_dt_and_std_dev_t:
+            (prev_sample, log_prob, prev_sample_mean, std_dev_t, sqrt_neg_dt)
+        else:
+            (prev_sample, log_prob, prev_sample_mean, std_dev_t * sqrt_neg_dt)
+    """
     model_output = model_output.float()
     sample = sample.float()
     if prev_sample is not None:
@@ -40,6 +59,12 @@ def sde_step_with_logprob(
         + model_output * (1 + std_dev_t**2 * (1 - sigma) / (2 * sigma)) * dt
     )
 
+    if prev_sample is not None and generator is not None:
+        raise ValueError(
+            "Cannot pass both generator and prev_sample. Please make sure that either `generator` or"
+            " `prev_sample` stays `None`."
+        )
+
     if prev_sample is None:
         variance_noise = randn_tensor(
             model_output.shape,
@@ -60,41 +85,40 @@ def sde_step_with_logprob(
         - torch.log(std_dev_t * torch.sqrt(-1 * dt))
         - torch.log(torch.sqrt(2 * torch.as_tensor(math.pi)))
     )
+
     log_prob = log_prob.mean(dim=tuple(range(1, log_prob.ndim)))
 
-    out = (prev_sample, log_prob)
-    if return_dt_and_std_dev_t:
-        out = (prev_sample, log_prob, prev_sample_mean, std_dev_t, dt)
-    return out
+    if return_sqrt_dt_and_std_dev_t:
+        return prev_sample, log_prob, prev_sample_mean, std_dev_t, torch.sqrt(-1 * dt)
+    return prev_sample, log_prob, prev_sample_mean, std_dev_t * torch.sqrt(-1 * dt)
 
 
 def wan_pipeline_with_logprob(
     self,
     prompt: Union[str, List[str]] = None,
+    negative_prompt: Union[str, List[str]] = None,
     height: int = 480,
     width: int = 832,
     num_frames: int = 81,
     num_inference_steps: int = 50,
     guidance_scale: float = 5.0,
-    num_videos_per_prompt: int = 1,
-    negative_prompt: Optional[Union[str, List[str]]] = None,
-    prompt_embeds: Optional[torch.FloatTensor] = None,
-    negative_prompt_embeds: Optional[torch.FloatTensor] = None,
-    output_type: Optional[str] = "pil",
+    num_videos_per_prompt: Optional[int] = 1,
+    generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+    latents: Optional[torch.Tensor] = None,
+    prompt_embeds: Optional[torch.Tensor] = None,
+    negative_prompt_embeds: Optional[torch.Tensor] = None,
+    output_type: Optional[str] = "np",
     return_dict: bool = True,
-    callback_on_step_end: Optional[Callable[[int, int, Dict], None]] = None,
-    callback_on_step_end_tensor_inputs: List[str] = [
-        "latents",
-        "prompt_embeds",
-        "negative_prompt_embeds",
-    ],
-    max_sequence_length: int = 226,
     attention_kwargs: Optional[Dict[str, Any]] = None,
-    generator: Optional[torch.Generator] = None,
-    latents: Optional[torch.FloatTensor] = None,
-    kl_reward: float = 0.0,
+    callback_on_step_end: Optional[
+        Union[
+            Callable[[int, int, Dict], None], PipelineCallback, MultiPipelineCallbacks
+        ]
+    ] = None,
+    callback_on_step_end_tensor_inputs: List[str] = ["latents"],
+    max_sequence_length: int = 512,
     determistic: bool = False,
-    autocast_dtype: Optional[torch.dtype] = torch.bfloat16,
+    kl_reward: float = 0.0,
 ):
     if isinstance(callback_on_step_end, (PipelineCallback, MultiPipelineCallbacks)):
         callback_on_step_end_tensor_inputs = callback_on_step_end.tensor_inputs
@@ -110,6 +134,9 @@ def wan_pipeline_with_logprob(
     )
 
     if num_frames % self.vae_scale_factor_temporal != 1:
+        print(
+            f"`num_frames - 1` has to be divisible by {self.vae_scale_factor_temporal}. Rounding to the nearest number."
+        )
         num_frames = (
             num_frames
             // self.vae_scale_factor_temporal
@@ -157,129 +184,133 @@ def wan_pipeline_with_logprob(
         num_channels_latents,
         height,
         width,
-        prompt_embeds.dtype,
+        num_frames,
+        torch.float32,
         device,
         generator,
         latents,
-        num_frames=num_frames,
     )
 
-    all_latents = []
-    all_log_probs = []
-    all_kl = []
+    all_latents: List[torch.Tensor] = [latents]
+    all_log_probs: List[torch.Tensor] = []
+    all_kl: List[torch.Tensor] = []
 
-    def get_noise_pred(latents, prompt_embeds, negative_prompt_embeds, timestep):
-        noise_pred = self.transformer(
-            hidden_states=latents,
-            timestep=timestep,
-            encoder_hidden_states=prompt_embeds,
-            attention_kwargs=attention_kwargs,
-            return_dict=False,
-        )[0]
-        noise_pred = noise_pred.to(prompt_embeds.dtype)
-        if self.do_classifier_free_guidance:
-            noise_uncond = self.transformer(
-                hidden_states=latents,
+    # 6. Denoising loop
+    num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
+    self._num_timesteps = len(timesteps)
+
+    with self.progress_bar(total=num_inference_steps) as progress_bar:
+        for i, t in enumerate(timesteps):
+            if self.interrupt:
+                continue
+
+            latents_ori = latents.clone()
+            self._current_timestep = t
+            latent_model_input = latents.to(transformer_dtype)
+            timestep = t.expand(latents.shape[0])
+
+            noise_pred = self.transformer(
+                hidden_states=latent_model_input,
                 timestep=timestep,
-                encoder_hidden_states=negative_prompt_embeds,
+                encoder_hidden_states=prompt_embeds,
                 attention_kwargs=attention_kwargs,
                 return_dict=False,
             )[0]
-            noise_pred = noise_uncond + guidance_scale * (noise_pred - noise_uncond)
-        return noise_pred
+            noise_pred = noise_pred.to(prompt_embeds.dtype)
 
-    with torch.autocast(device.type, dtype=autocast_dtype):
-        with self.progress_bar(total=len(timesteps)) as progress_bar:
-            for i, t in enumerate(timesteps):
-                latents_ori = latents.clone()
-                self._current_timestep = t
-                latent_model_input = latents.to(transformer_dtype)
-                timestep = t.expand(latents.shape[0])
+            if self.do_classifier_free_guidance:
+                noise_uncond = self.transformer(
+                    hidden_states=latent_model_input,
+                    timestep=timestep,
+                    encoder_hidden_states=negative_prompt_embeds,
+                    attention_kwargs=attention_kwargs,
+                    return_dict=False,
+                )[0]
+                noise_pred = noise_uncond + guidance_scale * (noise_pred - noise_uncond)
 
-                noise_pred = get_noise_pred(
-                    latent_model_input, prompt_embeds, negative_prompt_embeds, timestep
+            latents, log_prob, prev_latents_mean, std_dev_t = sde_step_with_logprob(
+                self.scheduler,
+                noise_pred.float(),
+                t.unsqueeze(0),
+                latents.float(),
+                determistic=determistic,
+            )
+            prev_latents = latents.clone()
+
+            all_latents.append(latents)
+            all_log_probs.append(log_prob)
+
+            if callback_on_step_end is not None:
+                callback_kwargs = {}
+                for k in callback_on_step_end_tensor_inputs:
+                    callback_kwargs[k] = locals()[k]
+                callback_outputs = callback_on_step_end(self, i, t, callback_kwargs)
+
+                latents = callback_outputs.pop("latents", latents)
+                prompt_embeds = callback_outputs.pop("prompt_embeds", prompt_embeds)
+                negative_prompt_embeds = callback_outputs.pop(
+                    "negative_prompt_embeds", negative_prompt_embeds
                 )
 
-                latents, log_prob, prev_latents_mean, std_dev_t = sde_step_with_logprob(
-                    self.scheduler,
-                    noise_pred.float(),
-                    t.unsqueeze(0),
-                    latents.float(),
-                    determistic=determistic,
+            if kl_reward > 0 and not determistic:
+                latent_model_input = (
+                    torch.cat([latents_ori] * 2)
+                    if self.do_classifier_free_guidance
+                    else latents_ori
                 )
-                prev_latents = latents.clone()
-
-                all_latents.append(latents)
-                all_log_probs.append(log_prob)
-
-                if callback_on_step_end is not None:
-                    callback_kwargs = {}
-                    for k in callback_on_step_end_tensor_inputs:
-                        callback_kwargs[k] = locals()[k]
-                    callback_outputs = callback_on_step_end(self, i, t, callback_kwargs)
-
-                    latents = callback_outputs.pop("latents", latents)
-                    prompt_embeds = callback_outputs.pop("prompt_embeds", prompt_embeds)
-                    negative_prompt_embeds = callback_outputs.pop(
-                        "negative_prompt_embeds", negative_prompt_embeds
-                    )
-
-                if kl_reward > 0 and not determistic:
-                    latent_model_input = (
-                        torch.cat([latents_ori] * 2)
-                        if self.do_classifier_free_guidance
-                        else latents_ori
-                    )
-                    ref_model = getattr(self, "ref_transformer", None)
-                    if ref_model is not None:
-                        ref_ctx = contextlib.nullcontext()
-                        target_model = ref_model
-                    else:
-                        target_model = self.transformer
-                        ref_ctx = (
-                            target_model.disable_adapter()
-                            if hasattr(target_model, "disable_adapter")
-                            else contextlib.nullcontext()
-                        )
-
-                    with ref_ctx:
-                        noise_pred_ref = target_model(
-                            hidden_states=latent_model_input,
-                            timestep=timestep,
-                            encoder_hidden_states=prompt_embeds,
-                            attention_kwargs=attention_kwargs,
-                            return_dict=False,
-                        )[0]
-                    noise_pred_ref = noise_pred_ref.to(prompt_embeds.dtype)
-                    if self.do_classifier_free_guidance:
-                        noise_pred_uncond, noise_pred_text = noise_pred_ref.chunk(2)
-                        noise_pred_ref = noise_pred_uncond + self.guidance_scale * (
-                            noise_pred_text - noise_pred_uncond
-                        )
-
-                    _, ref_log_prob, ref_prev_latents_mean, ref_std_dev_t = (
-                        sde_step_with_logprob(
-                            self.scheduler,
-                            noise_pred_ref.float(),
-                            t.unsqueeze(0),
-                            latents_ori.float(),
-                            prev_sample=prev_latents.float(),
-                            determistic=determistic,
-                        )
-                    )
-                    kl = (prev_latents_mean - ref_prev_latents_mean) ** 2 / (
-                        2 * ref_std_dev_t**2
-                    )
-                    kl = kl.mean(dim=tuple(range(1, kl.ndim)))
-                    all_kl.append(kl)
+                ref_model = getattr(self, "ref_transformer", None)
+                if ref_model is not None:
+                    ref_ctx = contextlib.nullcontext()
+                    target_model = ref_model
                 else:
-                    all_kl.append(torch.zeros(len(latents), device=latents.device))
+                    target_model = self.transformer
+                    ref_ctx = (
+                        target_model.disable_adapter()
+                        if hasattr(target_model, "disable_adapter")
+                        else contextlib.nullcontext()
+                    )
 
-                if i == len(timesteps) - 1 or (
-                    (i + 1) > len(timesteps) // self.scheduler.order
-                    and (i + 1) % self.scheduler.order == 0
-                ):
-                    progress_bar.update()
+                with ref_ctx:
+                    noise_pred = target_model(
+                        hidden_states=latent_model_input,
+                        timestep=timestep,
+                        encoder_hidden_states=prompt_embeds,
+                        attention_kwargs=attention_kwargs,
+                        return_dict=False,
+                    )[0]
+                noise_pred = noise_pred.to(prompt_embeds.dtype)
+                # perform guidance
+                if self.do_classifier_free_guidance:
+                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                    noise_pred = noise_pred_uncond + self.guidance_scale * (
+                        noise_pred_text - noise_pred_uncond
+                    )
+
+                _, ref_log_prob, ref_prev_latents_mean, ref_std_dev_t = (
+                    sde_step_with_logprob(
+                        self.scheduler,
+                        noise_pred.float(),
+                        t.unsqueeze(0),
+                        latents_ori.float(),
+                        prev_sample=prev_latents.float(),
+                        determistic=determistic,
+                    )
+                )
+                assert std_dev_t == ref_std_dev_t
+                kl = (prev_latents_mean - ref_prev_latents_mean) ** 2 / (
+                    2 * std_dev_t**2
+                )
+                kl = kl.mean(dim=tuple(range(1, kl.ndim)))
+                all_kl.append(kl)
+            else:
+                # no kl reward, we do not need to compute, just put a pre-position value, kl will be 0
+                all_kl.append(torch.zeros(len(latents), device=latents.device))
+
+            # call the callback, if provided
+            if i == len(timesteps) - 1 or (
+                (i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0
+            ):
+                progress_bar.update()
 
     self._current_timestep = None
 
