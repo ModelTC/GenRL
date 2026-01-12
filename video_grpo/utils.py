@@ -223,35 +223,6 @@ def save_ckpt(
     checkpoints_dir = os.path.join(cfg.paths.save_dir, "checkpoints")
     save_root = os.path.join(checkpoints_dir, f"checkpoint-{global_step}")
 
-    # Clean up old checkpoints if limit is set (only on main process)
-    if (
-        accelerator.is_main_process
-        and cfg.num_checkpoint_limit is not None
-        and cfg.num_checkpoint_limit > 0
-    ):
-        if os.path.exists(checkpoints_dir):
-            # Get all checkpoint directories
-            checkpoint_folders = []
-            for item in os.listdir(checkpoints_dir):
-                checkpoint_path = os.path.join(checkpoints_dir, item)
-                if os.path.isdir(checkpoint_path) and item.startswith("checkpoint-"):
-                    # Extract step number from folder name (e.g., "checkpoint-120" -> 120)
-                    match = re.search(r"checkpoint-(\d+)", item)
-                    if match:
-                        step_num = int(match.group(1))
-                        checkpoint_folders.append((step_num, checkpoint_path))
-
-            # Sort by step number (oldest first)
-            checkpoint_folders.sort(key=lambda x: x[0])
-
-            # Delete oldest checkpoints if we exceed the limit
-            # We check (len + 1) because we're about to save a new checkpoint
-            if len(checkpoint_folders) + 1 > cfg.num_checkpoint_limit:
-                num_to_delete = len(checkpoint_folders) + 1 - cfg.num_checkpoint_limit
-                for step_num, folder_path in checkpoint_folders[:num_to_delete]:
-                    shutil.rmtree(folder_path)
-                    print(f"Deleted old checkpoint: checkpoint-{step_num}")
-
     if accelerator.is_main_process:
         os.makedirs(save_root, exist_ok=True)
     metadata = {
@@ -323,7 +294,37 @@ def save_ckpt(
         if cfg.train.ema:
             ema.copy_temp_to(transformer_params)
 
-        accelerator.wait_for_everyone()
+    # Clean up old checkpoints after successful save (only on main process)
+    if (
+        accelerator.is_main_process
+        and cfg.num_checkpoint_limit is not None
+        and cfg.num_checkpoint_limit > 0
+    ):
+        if os.path.exists(checkpoints_dir):
+            # Get all checkpoint directories
+            checkpoint_folders = []
+            for item in os.listdir(checkpoints_dir):
+                checkpoint_path = os.path.join(checkpoints_dir, item)
+                if os.path.isdir(checkpoint_path) and item.startswith("checkpoint-"):
+                    # Extract step number from folder name (e.g., "checkpoint-120" -> 120)
+                    match = re.search(r"checkpoint-(\d+)", item)
+                    if match:
+                        step_num = int(match.group(1))
+                        checkpoint_folders.append((step_num, checkpoint_path))
+
+            # Sort by step number (oldest first)
+            checkpoint_folders.sort(key=lambda x: x[0])
+
+            # Delete oldest checkpoints if we exceed the limit
+            # After save, we now have len(checkpoint_folders) checkpoints total
+            if len(checkpoint_folders) > cfg.num_checkpoint_limit:
+                num_to_delete = len(checkpoint_folders) - cfg.num_checkpoint_limit
+                for step_num, folder_path in checkpoint_folders[:num_to_delete]:
+                    shutil.rmtree(folder_path)
+                    print(f"Deleted old checkpoint: checkpoint-{step_num}")
+
+    # Final synchronization: ensure all processes complete all save operations before returning
+    accelerator.wait_for_everyone()
 
 
 def calculate_zero_std_ratio(
