@@ -36,6 +36,7 @@ from video_grpo.utils import (  # type: ignore
     calculate_zero_std_ratio,
     create_generator,
     fast_init,
+    unwrap_model,
 )
 
 tqdm = partial(tqdm.tqdm, dynamic_ncols=True)
@@ -440,7 +441,10 @@ def train(cfg: Config):
     full_finetune = not cfg.use_lora
     ref_transformer = None
     if full_finetune and cfg.train.beta > 0:
-        # keep a frozen ref model; deepcopy to mirror original behavior
+        # Create ref_transformer from the initial pretrained model state
+        # This ensures ref_transformer always uses the original pretrained weights,
+        # not the current training state, which is important for KL loss calculation
+        # Note: We deepcopy here because pipeline.transformer will be modified during training
         ref_transformer = copy.deepcopy(pipeline.transformer)
         ref_transformer.requires_grad_(False)
 
@@ -493,7 +497,6 @@ def train(cfg: Config):
             )
 
     transformer = pipeline.transformer
-    transformer.enable_gradient_checkpointing()
     trainable_modules = [transformer]
     if full_finetune:
         trainable_modules.extend([pipeline.vae, pipeline.text_encoder])
@@ -597,9 +600,11 @@ def train(cfg: Config):
             first_epoch = metadata.get("epoch", 0)
             resume_epoch_tag = metadata.get("current_epoch_tag", None)
         if cfg.train.ema:
-            # Load per-rank EMA state (fallback to old filename if present).
+            # Load per-rank EMA state; required for FSDP shard alignment.
             ema_state_path = os.path.join(
-                resume_path, f"ema_state_rank{accelerator.process_index}.pt"
+                resume_path,
+                "ema",
+                f"ema_state_rank{accelerator.process_index}.pt",
             )
             if os.path.exists(ema_state_path) and ema is not None:
                 ema_state = torch.load(ema_state_path, map_location=accelerator.device)
@@ -607,6 +612,34 @@ def train(cfg: Config):
                 ema.to(accelerator.device)
             else:
                 raise ValueError(f"No EMA state found at {ema_state_path}")
+
+        # Ensure ref_transformer exists after resume
+        # Always reload from pretrained_model to ensure it uses original weights
+        # This is important because ref_transformer should be fixed reference model
+        if full_finetune and cfg.train.beta > 0:
+            if (
+                ref_transformer is None
+                or not hasattr(pipeline, "ref_transformer")
+                or pipeline.ref_transformer is None
+            ):
+                if accelerator.is_main_process:
+                    logger.info(
+                        f"Loading ref_transformer from pretrained_model: {cfg.paths.pretrained_model}"
+                    )
+                # Reload ref_transformer from pretrained_model path
+                # This ensures ref_transformer always uses the original pretrained weights
+                with fast_init(accelerator.device, init_weights=False):
+                    ref_pipeline = WanPipeline.from_pretrained(
+                        cfg.paths.pretrained_model
+                    )
+                ref_transformer = ref_pipeline.transformer
+                ref_transformer.requires_grad_(False)
+                ref_transformer = accelerator.prepare_model(
+                    ref_transformer, evaluation_mode=True
+                )
+                ref_transformer.eval()
+                pipeline.ref_transformer = ref_transformer
+
     if resume_epoch_tag is not None:
         train_sampler.set_epoch(resume_epoch_tag)
 
@@ -625,7 +658,7 @@ def train(cfg: Config):
         logger.info(
             "\n".join(
                 [
-                    "***** Running training *****",
+                    "\n***** Running training *****",
                     f"  Num Epochs = {cfg.num_epochs}",
                     f"  Sample batch size per device = {cfg.sample.batch_size}",
                     f"  Train batch size per device = {cfg.train.batch_size}",
@@ -641,7 +674,11 @@ def train(cfg: Config):
     for epoch in range(first_epoch, cfg.num_epochs):
         pipeline.transformer.eval()
 
-        if epoch % cfg.eval_freq == 0:
+        if (
+            epoch % cfg.eval_freq == 0
+            and epoch > 0
+            and not (resume_path and epoch == first_epoch)
+        ):
             eval_once(
                 cfg,
                 accelerator,
@@ -661,10 +698,9 @@ def train(cfg: Config):
         if (
             epoch % cfg.save_freq == 0
             and epoch > 0
-            and accelerator.is_main_process
             and not (
                 resume_path and epoch == first_epoch
-            )  # don't save checkpoint on resume from checkpoint
+            )  # don't save on the resume epoch
         ):
             current_epoch_tag = epoch * cfg.sample.num_batches_per_epoch
             save_ckpt(
@@ -677,7 +713,6 @@ def train(cfg: Config):
                 transformer_params,
                 current_epoch_tag,
             )
-        accelerator.wait_for_everyone()
 
         samples = sample_epoch(
             cfg,
@@ -839,6 +874,60 @@ def train(cfg: Config):
                     leave=False,
                     disable=not accelerator.is_local_main_process,
                 ):
+                    # Compute reference model output BEFORE accumulate context
+                    # This avoids checkpointing issues when model structure changes when using LoRA
+                    prev_sample_ref = None
+                    log_prob_ref = None
+                    prev_sample_mean_ref = None
+                    std_dev_t_ref = None
+                    dt_sqrt_ref = None
+
+                    if cfg.train.beta > 0:
+                        if full_finetune:
+                            ref_model = ref_transformer
+                            if ref_model is None:
+                                raise ValueError(
+                                    "full_finetune with beta>0 requires a ref_transformer."
+                                )
+                            ref_model.eval()
+                            with torch.no_grad():
+                                (
+                                    prev_sample_ref,
+                                    log_prob_ref,
+                                    prev_sample_mean_ref,
+                                    std_dev_t_ref,
+                                    dt_sqrt_ref,
+                                ) = compute_log_prob(
+                                    ref_model,
+                                    pipeline,
+                                    sample,
+                                    j,
+                                    embeds,
+                                    negative_embeds,
+                                    cfg,
+                                )
+                        else:
+                            # LoRA case: compute reference output outside accumulate context
+                            with torch.no_grad():
+                                with transformer.module.disable_adapter():
+                                    (
+                                        prev_sample_ref,
+                                        log_prob_ref,
+                                        prev_sample_mean_ref,
+                                        std_dev_t_ref,
+                                        dt_sqrt_ref,
+                                    ) = compute_log_prob(
+                                        transformer,
+                                        pipeline,
+                                        sample,
+                                        j,
+                                        embeds,
+                                        negative_embeds,
+                                        cfg,
+                                    )
+
+                    # Main model forward and backward in accumulate context
+                    # Model structure remains consistent (adapter always enabled)
                     with accelerator.accumulate(transformer):
                         with autocast():
                             (
@@ -856,48 +945,6 @@ def train(cfg: Config):
                                 negative_embeds,
                                 cfg,
                             )
-                            if cfg.train.beta > 0:
-                                if full_finetune:
-                                    ref_model = ref_transformer
-                                    if ref_model is None:
-                                        raise ValueError(
-                                            "full_finetune with beta>0 requires a ref_transformer."
-                                        )
-                                    ref_model.eval()
-                                    with torch.no_grad():
-                                        (
-                                            prev_sample_ref,
-                                            log_prob_ref,
-                                            prev_sample_mean_ref,
-                                            std_dev_t_ref,
-                                            dt_sqrt_ref,
-                                        ) = compute_log_prob(
-                                            ref_model,
-                                            pipeline,
-                                            sample,
-                                            j,
-                                            embeds,
-                                            negative_embeds,
-                                            cfg,
-                                        )
-                                else:
-                                    with torch.no_grad():
-                                        with transformer.module.disable_adapter():
-                                            (
-                                                prev_sample_ref,
-                                                log_prob_ref,
-                                                prev_sample_mean_ref,
-                                                std_dev_t_ref,
-                                                dt_sqrt_ref,
-                                            ) = compute_log_prob(
-                                                transformer,
-                                                pipeline,
-                                                sample,
-                                                j,
-                                                embeds,
-                                                negative_embeds,
-                                                cfg,
-                                            )
 
                         advantages = torch.clamp(
                             sample["advantages"][:, j],

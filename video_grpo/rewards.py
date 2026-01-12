@@ -1,5 +1,6 @@
 import importlib
 import torch
+import inspect
 from video_grpo.reward import video_ocr_score
 
 
@@ -10,12 +11,17 @@ def load_reward_fn(name: str, device, module_path: str | None = None):
         fn = getattr(mod, f"{name}_score", None)
         if fn is None:
             raise ValueError(f"Reward {name}_score not found in {module_path}")
-        return fn(device)
+        return fn(device) if callable(fn) else fn
     builtin = {
         "video_ocr": video_ocr_score,
     }
     if name in builtin:
-        return builtin[name](device)
+        fn = builtin[name]
+        sig = inspect.signature(fn)
+        accepts_device = any(
+            p.name == "device" or p.name == "dev" for p in sig.parameters.values()
+        )
+        return fn(device) if accepts_device else fn()
 
     # Fallback: zero reward
     def _fn(images, prompts, metadata, only_strict=False):

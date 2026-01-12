@@ -169,7 +169,7 @@ def log_videos(
         frames = [img for img in video.cpu().numpy().transpose(0, 2, 3, 1)]
         frames = [(frame * 255).astype(np.uint8) for frame in frames]
         out_path = os.path.join(video_dir, f"{tag}_{step}_{idx}.mp4")
-        imageio.mimsave(out_path, frames, fps=8, codec="libx264", format="FFMPEG")
+        imageio.mimsave(out_path, frames, fps=16, codec="libx264", format="FFMPEG")
         video_paths.append(out_path)
     accelerator.log(
         {
@@ -178,7 +178,6 @@ def log_videos(
                     path,
                     caption=f"{prompt:.100} | avg: {avg_reward:.2f}",
                     format="mp4",
-                    fps=8,
                 )
                 for path, prompt, avg_reward in zip(
                     video_paths,
@@ -216,7 +215,9 @@ def save_ckpt(
     save_root = os.path.join(
         cfg.paths.save_dir, "checkpoints", f"checkpoint-{global_step}"
     )
-    os.makedirs(save_root, exist_ok=True)
+    if accelerator.is_main_process:
+        os.makedirs(save_root, exist_ok=True)
+    accelerator.wait_for_everyone()
     metadata = {
         "global_step": global_step,
         "epoch": epoch,
@@ -226,8 +227,12 @@ def save_ckpt(
     accelerator.save_state(save_root)
     # Save EMA per-rank to avoid FSDP shard mismatches.
     if cfg.train.ema:
+        ema_dir = os.path.join(save_root, "ema")
+        if accelerator.is_main_process:
+            os.makedirs(ema_dir, exist_ok=True)
+        accelerator.wait_for_everyone()
         ema_path = os.path.join(
-            save_root, f"ema_state_rank{accelerator.process_index}.pt"
+            ema_dir, f"ema_state_rank{accelerator.process_index}.pt"
         )
         torch.save(ema.state_dict(), ema_path)
 
@@ -244,6 +249,7 @@ def save_ckpt(
             json.dump(metadata, f)
         if cfg.train.ema:
             ema.copy_temp_to(transformer_params)
+    accelerator.wait_for_everyone()
 
 
 def calculate_zero_std_ratio(

@@ -286,15 +286,18 @@ def wan_pipeline_with_logprob(
                         noise_pred_text - noise_pred_uncond
                     )
 
-                _, ref_log_prob, ref_prev_latents_mean, ref_std_dev_t = (
-                    sde_step_with_logprob(
-                        self.scheduler,
-                        noise_pred.float(),
-                        t.unsqueeze(0),
-                        latents_ori.float(),
-                        prev_sample=prev_latents.float(),
-                        determistic=determistic,
-                    )
+                (
+                    _,
+                    ref_log_prob,
+                    ref_prev_latents_mean,
+                    ref_std_dev_t,
+                ) = sde_step_with_logprob(
+                    self.scheduler,
+                    noise_pred.float(),
+                    t.unsqueeze(0),
+                    latents_ori.float(),
+                    prev_sample=prev_latents.float(),
+                    determistic=determistic,
                 )
                 assert std_dev_t == ref_std_dev_t
                 kl = (prev_latents_mean - ref_prev_latents_mean) ** 2 / (

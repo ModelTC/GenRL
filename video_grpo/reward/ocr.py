@@ -4,6 +4,7 @@ from typing import List, Union
 from PIL import Image
 from paddleocr import PaddleOCR
 from Levenshtein import distance
+from loguru import logger
 
 
 def _prepare_images(images):
@@ -17,14 +18,13 @@ def _prepare_images(images):
     return images
 
 
-def video_ocr_score(device):
+def video_ocr_score():
     """
     OCR-based reward for images or videos. Videos are sampled every few frames.
     Returns a dict with key 'avg'.
     """
-    ocr = PaddleOCR(
-        use_angle_cls=False, lang="en", use_gpu=(device.type == "cuda"), show_log=False
-    )
+    # Must run on CPU.
+    ocr = PaddleOCR(use_angle_cls=False, lang="en", use_gpu=False, show_log=False)
     frame_interval = 4
 
     def _fn(
@@ -66,7 +66,7 @@ def video_ocr_score(device):
                     frame_rewards.append(reward)
             rewards.append(np.mean(frame_rewards) if frame_rewards else 0.0)
 
-        rewards = torch.tensor(rewards, device=device, dtype=torch.float32)
+        rewards = torch.tensor(rewards, dtype=torch.float32)
         return {"avg": rewards}, {}
 
     return _fn
