@@ -83,6 +83,7 @@ class SampleConfig:
     num_video_per_prompt: int = 4
     kl_reward: float = 0.0
     global_std: bool = False
+    max_group_std: bool = False
     same_latent: bool = False
     noise_level: Optional[float] = 0.7
     sde_window_size: Optional[int] = None

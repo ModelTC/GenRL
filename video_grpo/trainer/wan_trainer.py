@@ -582,7 +582,10 @@ def train(cfg: Config):
     if cfg.sample.num_video_per_prompt == 1:
         cfg.per_prompt_stat_tracking = False
     if cfg.per_prompt_stat_tracking:
-        stat_tracker = PerPromptStatTracker(cfg.sample.global_std)
+        stat_tracker = PerPromptStatTracker(
+            use_global_std=cfg.sample.global_std,
+            max_group_std=cfg.sample.max_group_std,
+        )
 
     autocast = contextlib.nullcontext if cfg.use_lora else accelerator.autocast
 

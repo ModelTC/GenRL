@@ -4,9 +4,15 @@ import torch
 
 
 class PerPromptStatTracker:
-    def __init__(self, use_global_std: bool = False):
-        """Track per-prompt reward history and compute advantages."""
+    def __init__(self, use_global_std: bool = False, max_group_std: bool = False):
+        """Track per-prompt reward history and compute advantages.
+
+        Args:
+            use_global_std: If True, use global std across all rewards.
+            max_group_std: If True, use the maximum std among all prompt groups.
+        """
         self.use_global_std = use_global_std
+        self.max_group_std = max_group_std
         self.stats = {}
         self.history_prompts = set()
 
@@ -25,18 +31,36 @@ class PerPromptStatTracker:
         rewards = np.array(rewards, dtype=np.float64)
         unique = np.unique(prompts)
         advantages = np.empty_like(rewards) * 0.0
+        # First pass: update stats for all prompts
         for prompt in unique:
             prompt_rewards = rewards[prompts == prompt]
             if prompt not in self.stats:
                 self.stats[prompt] = []
             self.stats[prompt].extend(prompt_rewards)
             self.history_prompts.add(hash(prompt))
-        for prompt in unique:
+            # Convert to numpy array for computation
             self.stats[prompt] = np.stack(self.stats[prompt])
+
+        # Compute max_std if max_group_std is enabled
+        max_std = None
+        if self.max_group_std and len(unique) > 0:
+            prompt_stds = []
+            for prompt in unique:
+                prompt_std = np.std(self.stats[prompt], axis=0, keepdims=True) + 1e-4
+                prompt_stds.append(prompt_std)
+            # Find the maximum std value across all prompts
+            max_std_value = max(np.max(std) for std in prompt_stds)
+            # Use the shape of the first std and fill with max_std_value
+            max_std = np.full_like(prompt_stds[0], max_std_value)
+
+        # Second pass: compute advantages for each prompt
+        for prompt in unique:
             prompt_rewards = rewards[prompts == prompt]
             mean = np.mean(self.stats[prompt], axis=0, keepdims=True)
             if self.use_global_std:
                 std = np.std(rewards, axis=0, keepdims=True) + 1e-4
+            elif self.max_group_std:
+                std = max_std
             else:
                 std = np.std(self.stats[prompt], axis=0, keepdims=True) + 1e-4
             if mode == "grpo":
