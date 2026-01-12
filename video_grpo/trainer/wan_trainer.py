@@ -586,7 +586,8 @@ def train(cfg: Config):
     global_step = 0
     resume_epoch_tag = None
     if resume_path:
-        logger.info(f"Resuming from {resume_path}")
+        if accelerator.is_main_process:
+            logger.info(f"Resuming from {resume_path}")
         accelerator.load_state(resume_path)
         meta_path = os.path.join(resume_path, "metadata.json")
         if os.path.exists(meta_path):
