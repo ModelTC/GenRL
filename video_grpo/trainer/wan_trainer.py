@@ -339,9 +339,6 @@ def sample_epoch(
                 prompts, base_seed=epoch * 10000 + i, device=accelerator.device
             )
 
-        # Synchronize all processes before pipeline call to avoid NCCL timeout
-        accelerator.wait_for_everyone()
-
         with autocast():
             with torch.no_grad():
                 videos, latents, log_probs, kls = wan_pipeline_with_logprob(
@@ -1093,23 +1090,33 @@ def train(cfg: Config):
         logger.info("Training completed. Saving final model...")
     accelerator.wait_for_everyone()
 
+    # Apply EMA weights to model before saving (on all processes, before unwrap)
+    if cfg.train.ema:
+        ema.copy_ema_to(transformer_params, store_temp=True)
+
+    base_transformer = unwrap_model(transformer, accelerator)
+
+    # Prepare directories (only on main process)
     if accelerator.is_main_process:
-        # Prepare final model directory (same level as checkpoints)
         final_model_dir = os.path.join(cfg.paths.save_dir, "final_model")
         os.makedirs(final_model_dir, exist_ok=True)
+    else:
+        final_model_dir = None
 
-        if cfg.train.ema:
-            ema.copy_ema_to(transformer_params, store_temp=True)
+    # Synchronize before save_pretrained - it may trigger FSDP unshard operations
+    accelerator.wait_for_everyone()
 
-        base_transformer = unwrap_model(transformer, accelerator)
-        base_transformer.save_pretrained(final_model_dir)
-
+    # Save model - use try-finally to ensure cleanup even if save fails
+    try:
+        if accelerator.is_main_process:
+            base_transformer.save_pretrained(final_model_dir)
+            logger.info(f"Final model saved to {final_model_dir}")
+    finally:
         if cfg.train.ema:
             ema.copy_temp_to(transformer_params)
 
-        logger.info(f"Final model saved to {final_model_dir}")
-
-    accelerator.wait_for_everyone()
+        # Synchronize after saving to ensure all processes complete
+        accelerator.wait_for_everyone()
 
 
 def run(cfg: Config):

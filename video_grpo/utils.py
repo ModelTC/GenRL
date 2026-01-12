@@ -232,39 +232,53 @@ def save_ckpt(
         ema_dir = os.path.join(save_root, "ema")
         if accelerator.is_main_process:
             os.makedirs(ema_dir, exist_ok=True)
-        accelerator.wait_for_everyone()
         ema_path = os.path.join(
             ema_dir, f"ema_state_rank{accelerator.process_index}.pt"
         )
         torch.save(ema.state_dict(), ema_path)
 
-    # Synchronize all processes before unwrapping and saving model
-    # This is critical in FSDP environments to avoid NCCL timeout
-    accelerator.wait_for_everyone()
+    # Apply EMA weights to model before saving (on all processes, before unwrap)
+    if cfg.train.ema:
+        ema.copy_ema_to(transformer_params, store_temp=True)
 
+    # Unwrap model on all processes (needed to avoid FSDP unshard in save_pretrained)
+    #
+    # Evidence that save_pretrained triggers unshard without unwrap:
+    # 1. FSDP.state_dict() calls _unshard_params_for_summon() to gather sharded parameters
+    # 2. PEFT's save_pretrained() calls get_peft_model_state_dict() which calls model.state_dict()
+    # 3. Without unwrap, model.state_dict() on FSDP-wrapped model triggers unshard operations
+    # 4. Unshard requires all processes to participate via all_gather, which can deadlock
+    #    if processes are not synchronized (e.g., only main process calls save_pretrained)
+    #
+    # Solution: unwrap_model() removes FSDP wrapper via extract_model_from_parallel(),
+    # which checks isinstance(model, FSDP) and extracts the underlying module.
+    # After unwrap, state_dict() operates on the base model without triggering unshard.
+    base_transformer = unwrap_model(transformer, accelerator)
+
+    # Prepare directories (only on main process)
     if accelerator.is_main_process:
         unwrap_dir = os.path.join(save_root, "unwrapped_model")
         os.makedirs(unwrap_dir, exist_ok=True)
-
-        if cfg.train.ema:
-            ema.copy_ema_to(transformer_params, store_temp=True)
-
-        # Unwrap model - this may trigger FSDP unshard, so ensure all processes are ready
-        base_transformer = unwrap_model(transformer, accelerator)
         transformer_dir = os.path.join(unwrap_dir, "transformer")
+    else:
+        transformer_dir = None
 
-        # Save model - even after unwrap, save_pretrained may trigger FSDP unshard
-        # if the underlying model still has FSDP-wrapped submodules
-        # Ensure all processes are synchronized before save_pretrained
-        base_transformer.save_pretrained(transformer_dir)
+    # Synchronize before save_pretrained
+    # After unwrap, save_pretrained should not trigger unshard, but we keep this sync
+    # for safety in case of nested FSDP or other edge cases
+    accelerator.wait_for_everyone()
 
-        with open(os.path.join(save_root, "metadata.json"), "w") as f:
-            json.dump(metadata, f)
+    try:
+        if accelerator.is_main_process:
+            base_transformer.save_pretrained(transformer_dir)
+
+            with open(os.path.join(save_root, "metadata.json"), "w") as f:
+                json.dump(metadata, f)
+    finally:
         if cfg.train.ema:
             ema.copy_temp_to(transformer_params)
 
-    # Synchronize after saving to ensure all processes complete
-    accelerator.wait_for_everyone()
+        accelerator.wait_for_everyone()
 
 
 def calculate_zero_std_ratio(
