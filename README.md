@@ -24,8 +24,43 @@ Single node example (default `config/default.yaml`, LoRA + FSDP):
 accelerate launch train.py --config config/default.yaml
 ```
 
-Notes
+## Directory Structure
+
+After training, the output directory structure is organized as follows:
+
+```
+logs/
+└── video_ocr/
+    └── wan_flow_grpo_2026.01.12_21.48.08/    # Run directory (save_dir/run_name)
+        ├── checkpoints/                       # Training checkpoints
+        │   └── checkpoint-{step}/
+        │       ├── ema/                       # EMA states (if enabled)
+        │       ├── unwrapped_model/
+        │       │   └── transformer/           # Unwrapped model weights
+        │       └── metadata.json              # Checkpoint metadata
+        ├── final_model/                       # Final model after training completes
+        │   └── transformer/                  # Final model weights
+        │       ├── adapter_config.json        # LoRA config (if using LoRA)
+        │       └── adapter_model.safetensors  # LoRA weights (if using LoRA)
+        │       # OR full transformer weights (if full finetune)
+        ├── eval_videos/                       # Evaluation videos
+        └── sample_videos/                     # Training sample videos
+```
+
+**Notes:**
+- The run directory name includes a timestamp: `{run_name}_{YYYY.MM.DD_HH.MM.SS}`
+- `checkpoints/` contains periodic checkpoints saved during training
+- `final_model/` contains the final trained model:
+  - For LoRA training: Only LoRA adapter weights are saved
+  - For full finetune: Complete transformer weights are saved
+- Videos are saved in `eval_videos/` and `sample_videos/` directories
+
+## Notes
+
 - All config is YAML-driven (`config/default.yaml`): FSDP, LoRA/full finetune, rewards, data paths, etc.
 - Train/eval rewards can differ via `reward_fn/reward_module` and `eval_reward_fn/eval_reward_module`.
-- Checkpoints: `paths.save_dir/checkpoints/checkpoint-*`; logs & videos: `paths.save_dir/run_name/`.
+- All outputs (checkpoints, videos, final model) are saved under `paths.save_dir/run_name/`:
+  - Checkpoints: `paths.save_dir/run_name/checkpoints/checkpoint-{step}/`
+  - Videos: `paths.save_dir/run_name/eval_videos/` and `sample_videos/`
+  - Final model: `paths.save_dir/run_name/final_model/`
 

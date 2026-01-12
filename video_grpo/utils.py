@@ -159,7 +159,8 @@ def log_videos(
         rewards: Dict containing at least key 'avg'.
         step: Global step for logging.
     """
-    video_dir = os.path.join(cfg.paths.save_dir, cfg.run_name, f"{tag}_videos")
+    # save_dir already contains run_name, so don't add it again
+    video_dir = os.path.join(cfg.paths.save_dir, f"{tag}_videos")
     os.makedirs(video_dir, exist_ok=True)
     num_samples = min(15, len(videos))
     sample_indices = random.sample(range(len(videos)), num_samples)
@@ -212,6 +213,7 @@ def save_ckpt(
         transformer_params: List of trainable parameters for EMA swap.
         current_epoch_tag: Sampler epoch_tag for resume alignment.
     """
+    # save_dir already contains run_name, so checkpoints will be saved in run directory
     save_root = os.path.join(
         cfg.paths.save_dir, "checkpoints", f"checkpoint-{global_step}"
     )
@@ -251,7 +253,7 @@ def save_ckpt(
         base_transformer = unwrap_model(transformer, accelerator)
         transformer_dir = os.path.join(unwrap_dir, "transformer")
 
-        # Save model - even after unwrap, PEFT's save_pretrained may trigger FSDP unshard
+        # Save model - even after unwrap, save_pretrained may trigger FSDP unshard
         # if the underlying model still has FSDP-wrapped submodules
         # Ensure all processes are synchronized before save_pretrained
         base_transformer.save_pretrained(transformer_dir)

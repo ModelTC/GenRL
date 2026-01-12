@@ -1088,6 +1088,29 @@ def train(cfg: Config):
                 if cfg.train.ema:
                     ema.step(transformer_params, global_step)
 
+    # Save final model after training completes
+    if accelerator.is_main_process:
+        logger.info("Training completed. Saving final model...")
+    accelerator.wait_for_everyone()
+
+    if accelerator.is_main_process:
+        # Prepare final model directory (same level as checkpoints)
+        final_model_dir = os.path.join(cfg.paths.save_dir, "final_model")
+        os.makedirs(final_model_dir, exist_ok=True)
+
+        if cfg.train.ema:
+            ema.copy_ema_to(transformer_params, store_temp=True)
+
+        base_transformer = unwrap_model(transformer, accelerator)
+        base_transformer.save_pretrained(final_model_dir)
+
+        if cfg.train.ema:
+            ema.copy_temp_to(transformer_params)
+
+        logger.info(f"Final model saved to {final_model_dir}")
+
+    accelerator.wait_for_everyone()
+
 
 def run(cfg: Config):
     """Trainer entry used by factory.
