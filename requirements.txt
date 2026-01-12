@@ -19,6 +19,7 @@ requests==2.32.3
 matplotlib==3.10.0
 deepspeed==0.16.4
 peft==0.10.0
+imageio-ffmpeg==0.6.0
 bitsandbytes==0.45.3
 aiohttp==3.11.13
 fastapi==0.115.11

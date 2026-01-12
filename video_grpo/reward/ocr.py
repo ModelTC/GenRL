@@ -8,6 +8,11 @@ from Levenshtein import distance
 
 def _prepare_images(images):
     if isinstance(images, torch.Tensor):
+        # Align with flow_grpo: handle 4D (NCHW) and 5D (NFCHW) tensors.
+        if images.dim() == 4 and images.shape[1] == 3:
+            images = images.permute(0, 2, 3, 1)  # NCHW -> NHWC
+        elif images.dim() == 5 and images.shape[2] == 3:
+            images = images.permute(0, 1, 3, 4, 2)  # NFCHW -> NFHWC
         images = (images * 255).round().clamp(0, 255).to(torch.uint8).cpu().numpy()
     return images
 
@@ -28,6 +33,7 @@ def video_ocr_score(device):
         metadata=None,
         only_strict: bool = True,
     ):
+        # Align with flow_grpo: take text inside quotes if present, strip spaces/lower.
         prompts_clean = [p.split('"')[1] if '"' in p else p for p in prompts]
         prompts_clean = [p.replace(" ", "").lower() for p in prompts_clean]
         images_np = _prepare_images(images)
@@ -55,7 +61,9 @@ def video_ocr_score(device):
                 except Exception:
                     dist = len(prompt)
                 reward = 1 - dist / max(len(prompt), 1)
-                frame_rewards.append(reward)
+                # Keep positive frames (flow_grpo behavior), drop zero-only sequences.
+                if reward > 0:
+                    frame_rewards.append(reward)
             rewards.append(np.mean(frame_rewards) if frame_rewards else 0.0)
 
         rewards = torch.tensor(rewards, device=device, dtype=torch.float32)

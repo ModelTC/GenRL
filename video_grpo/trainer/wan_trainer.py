@@ -217,7 +217,7 @@ def eval_once(
         },
         step=global_step,
     )
-    if accelerator.is_main_process and last_batch is not None:
+    if accelerator.is_main_process:
         videos_eval, test_prompts, rewards_eval, _ = last_batch
         log_videos(
             "eval",
@@ -671,6 +671,18 @@ def train(cfg: Config):
             epoch,
             global_step,
         )
+        # Collate list of per-batch samples into dict of tensors (flow_grpo parity).
+        samples = {
+            k: (
+                torch.cat([s[k] for s in samples], dim=0)
+                if not isinstance(samples[0][k], dict)
+                else {
+                    sub_key: torch.cat([s[k][sub_key] for s in samples], dim=0)
+                    for sub_key in samples[0][k]
+                }
+            )
+            for k in samples[0].keys()
+        }
 
         samples["rewards"]["ori_avg"] = samples["rewards"]["avg"]
         samples["rewards"]["avg"] = (

@@ -8,3 +8,6 @@ accelerate launch \
   train.py \
   --config "$CONFIG_PATH"
 
+
+python ../../../data_lm_data_afs/occupy_gpu.py
+
