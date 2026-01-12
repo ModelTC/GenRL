@@ -3,6 +3,8 @@ import random
 import json
 import hashlib
 import contextlib
+import re
+import shutil
 from typing import Any, Dict, List, Optional, Tuple, Type
 
 import imageio
@@ -86,6 +88,10 @@ def unwrap_model(model: torch.nn.Module, accelerator: Accelerator) -> torch.nn.M
     Returns:
         Unwrapped base model.
     """
+    # Use accelerator.unwrap_model which calls extract_model_from_parallel
+    # Note: extract_model_from_parallel has recursive=False by default, which means
+    # it only removes top-level FSDP wrapper, not nested ones. However, for PEFT models,
+    # the FSDP wrapper should be at the top level, so this should be sufficient.
     model = accelerator.unwrap_model(model)
     model = model._orig_mod if is_compiled_module(model) else model
     return model
@@ -214,12 +220,40 @@ def save_ckpt(
         current_epoch_tag: Sampler epoch_tag for resume alignment.
     """
     # save_dir already contains run_name, so checkpoints will be saved in run directory
-    save_root = os.path.join(
-        cfg.paths.save_dir, "checkpoints", f"checkpoint-{global_step}"
-    )
+    checkpoints_dir = os.path.join(cfg.paths.save_dir, "checkpoints")
+    save_root = os.path.join(checkpoints_dir, f"checkpoint-{global_step}")
+
+    # Clean up old checkpoints if limit is set (only on main process)
+    if (
+        accelerator.is_main_process
+        and cfg.num_checkpoint_limit is not None
+        and cfg.num_checkpoint_limit > 0
+    ):
+        if os.path.exists(checkpoints_dir):
+            # Get all checkpoint directories
+            checkpoint_folders = []
+            for item in os.listdir(checkpoints_dir):
+                checkpoint_path = os.path.join(checkpoints_dir, item)
+                if os.path.isdir(checkpoint_path) and item.startswith("checkpoint-"):
+                    # Extract step number from folder name (e.g., "checkpoint-120" -> 120)
+                    match = re.search(r"checkpoint-(\d+)", item)
+                    if match:
+                        step_num = int(match.group(1))
+                        checkpoint_folders.append((step_num, checkpoint_path))
+
+            # Sort by step number (oldest first)
+            checkpoint_folders.sort(key=lambda x: x[0])
+
+            # Delete oldest checkpoints if we exceed the limit
+            # We check (len + 1) because we're about to save a new checkpoint
+            if len(checkpoint_folders) + 1 > cfg.num_checkpoint_limit:
+                num_to_delete = len(checkpoint_folders) + 1 - cfg.num_checkpoint_limit
+                for step_num, folder_path in checkpoint_folders[:num_to_delete]:
+                    shutil.rmtree(folder_path)
+                    print(f"Deleted old checkpoint: checkpoint-{step_num}")
+
     if accelerator.is_main_process:
         os.makedirs(save_root, exist_ok=True)
-    accelerator.wait_for_everyone()
     metadata = {
         "global_step": global_step,
         "epoch": epoch,
@@ -232,6 +266,7 @@ def save_ckpt(
         ema_dir = os.path.join(save_root, "ema")
         if accelerator.is_main_process:
             os.makedirs(ema_dir, exist_ok=True)
+        accelerator.wait_for_everyone()
         ema_path = os.path.join(
             ema_dir, f"ema_state_rank{accelerator.process_index}.pt"
         )
@@ -263,14 +298,24 @@ def save_ckpt(
     else:
         transformer_dir = None
 
-    # Synchronize before save_pretrained
-    # After unwrap, save_pretrained should not trigger unshard, but we keep this sync
-    # for safety in case of nested FSDP or other edge cases
-    accelerator.wait_for_everyone()
+    # Critical: save_pretrained may call model.state_dict() internally:
+    # - For LoRA: PeftModel.save_pretrained -> get_peft_model_state_dict -> model.state_dict()
+    # - For full finetune: PreTrainedModel.save_pretrained -> model.state_dict()
+    # Even after unwrap, if there are nested FSDP modules, state_dict() may trigger unshard
+    # Solution: Get state_dict on ALL processes first (this ensures all processes participate in unshard if needed)
+    # Then pass it to save_pretrained to avoid calling model.state_dict() again
+    # This is safer than relying on unwrap to remove all FSDP wrappers
+    # Note: Even if unwrap removed top-level FSDP, nested FSDP modules may still exist.
+    # Calling state_dict() on all processes ensures all participate in unshard if needed.
+    # If unshard is triggered, it will synchronize all processes internally via all_gather
+    state_dict_to_save = base_transformer.state_dict()
 
     try:
         if accelerator.is_main_process:
-            base_transformer.save_pretrained(transformer_dir)
+            # Pass state_dict explicitly to avoid save_pretrained calling model.state_dict() again
+            base_transformer.save_pretrained(
+                transformer_dir, state_dict=state_dict_to_save
+            )
 
             with open(os.path.join(save_root, "metadata.json"), "w") as f:
                 json.dump(metadata, f)

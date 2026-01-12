@@ -449,7 +449,8 @@ def train(cfg: Config):
     accelerator_config = ProjectConfiguration(
         project_dir=cfg.paths.save_dir,
         automatic_checkpoint_naming=False,  # Disable automatic checkpointing - we use save_ckpt instead
-        total_limit=cfg.num_checkpoint_limit,
+        # Note: total_limit is not used when automatic_checkpoint_naming=False
+        # Checkpoint cleanup is handled manually in save_ckpt()
     )
     train_timesteps = [step_index for step_index in range(num_train_timesteps)]
     gradient_accumulation_steps = base_gas * num_train_timesteps
@@ -1103,13 +1104,20 @@ def train(cfg: Config):
     else:
         final_model_dir = None
 
-    # Synchronize before save_pretrained - it may trigger FSDP unshard operations
-    accelerator.wait_for_everyone()
+    # Critical: save_pretrained may call model.state_dict() internally:
+    # - For LoRA: PeftModel.save_pretrained -> get_peft_model_state_dict -> model.state_dict()
+    # - For full finetune: PreTrainedModel.save_pretrained -> model.state_dict()
+    # Get state_dict on ALL processes first (ensures all participate in unshard if needed)
+    # Then pass it to save_pretrained to avoid calling model.state_dict() again
+    state_dict_to_save = base_transformer.state_dict()
 
     # Save model - use try-finally to ensure cleanup even if save fails
     try:
         if accelerator.is_main_process:
-            base_transformer.save_pretrained(final_model_dir)
+            # Pass state_dict explicitly to avoid save_pretrained calling model.state_dict() again
+            base_transformer.save_pretrained(
+                final_model_dir, state_dict=state_dict_to_save
+            )
             logger.info(f"Final model saved to {final_model_dir}")
     finally:
         if cfg.train.ema:
