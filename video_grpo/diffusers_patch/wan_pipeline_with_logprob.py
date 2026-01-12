@@ -4,7 +4,7 @@ import contextlib
 from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
 from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepScheduler
 from diffusers.utils.torch_utils import randn_tensor
-from diffusers.pipelines.wan import WanPipelineOutput
+from diffusers.pipelines.wan.pipeline_output import WanPipelineOutput
 import math
 import numpy as np
 
