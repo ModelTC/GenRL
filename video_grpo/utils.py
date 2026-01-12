@@ -224,10 +224,14 @@ def save_ckpt(
         "run_name": cfg.run_name,
     }
     accelerator.save_state(save_root)
-    if accelerator.is_main_process:
-        if cfg.train.ema:
-            torch.save(ema.state_dict(), os.path.join(save_root, "ema_state.pt"))
+    # Save EMA per-rank to avoid FSDP shard mismatches.
+    if cfg.train.ema:
+        ema_path = os.path.join(
+            save_root, f"ema_state_rank{accelerator.process_index}.pt"
+        )
+        torch.save(ema.state_dict(), ema_path)
 
+    if accelerator.is_main_process:
         unwrap_dir = os.path.join(save_root, "unwrapped_model")
         os.makedirs(unwrap_dir, exist_ok=True)
 

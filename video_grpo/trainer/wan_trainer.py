@@ -236,6 +236,7 @@ def eval_once(
             rewards_eval,
             global_step,
         )
+    # restore weights after eval
     if cfg.train.ema and ema is not None and transformer_params is not None:
         ema.copy_temp_to(transformer_params)
 
@@ -444,7 +445,6 @@ def train(cfg: Config):
         ref_transformer.requires_grad_(False)
 
     if full_finetune:
-        cfg.use_lora = False
         pipeline.vae.requires_grad_(False)
         pipeline.text_encoder.requires_grad_(False)
         pipeline.transformer.requires_grad_(True)
@@ -502,12 +502,6 @@ def train(cfg: Config):
         transformer_params.extend(
             list(filter(lambda p: p.requires_grad, module.parameters()))
         )
-    ema = EMAModuleWrapper(
-        transformer_params,
-        decay=cfg.train.ema_decay,
-        update_step_interval=cfg.train.ema_update_interval,
-        device=accelerator.device,
-    )
 
     if cfg.allow_tf32:
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -576,6 +570,17 @@ def train(cfg: Config):
         ref_transformer.eval()
         pipeline.ref_transformer = ref_transformer
 
+    # Rebuild trainable params on wrapped model and init EMA after wrapping.
+    transformer_params = [p for p in transformer.parameters() if p.requires_grad]
+    ema = None
+    if cfg.train.ema:
+        ema = EMAModuleWrapper(
+            transformer_params,
+            decay=cfg.train.ema_decay,
+            update_step_interval=cfg.train.ema_update_interval,
+            device=accelerator.device,
+        )
+
     train_iter = iter(train_dataloader)
     first_epoch = 0
     global_step = 0
@@ -591,11 +596,16 @@ def train(cfg: Config):
             first_epoch = metadata.get("epoch", 0)
             resume_epoch_tag = metadata.get("current_epoch_tag", None)
         if cfg.train.ema:
-            ema_state_path = os.path.join(resume_path, "ema_state.pt")
-            if os.path.exists(ema_state_path):
+            # Load per-rank EMA state (fallback to old filename if present).
+            ema_state_path = os.path.join(
+                resume_path, f"ema_state_rank{accelerator.process_index}.pt"
+            )
+            if os.path.exists(ema_state_path) and ema is not None:
                 ema_state = torch.load(ema_state_path, map_location=accelerator.device)
                 ema.load_state_dict(ema_state)
                 ema.to(accelerator.device)
+            else:
+                raise ValueError(f"No EMA state found at {ema_state_path}")
     if resume_epoch_tag is not None:
         train_sampler.set_epoch(resume_epoch_tag)
 
