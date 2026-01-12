@@ -161,7 +161,7 @@ def build_dataloaders(
         k=cfg.sample.num_video_per_prompt,
         num_replicas=accelerator.num_processes,
         rank=accelerator.process_index,
-        seed=42,
+        seed=cfg.seed,
     )
 
     train_dataloader = DataLoader(

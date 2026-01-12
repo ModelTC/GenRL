@@ -459,6 +459,11 @@ def train(cfg: Config):
         cfg, gradient_accumulation_steps, accelerator_config
     )
 
+    # Set seed for reproducibility (before resume, so resume will restore random states)
+    # For new training, this sets the initial random state
+    # For resume, load_state will restore the saved random states
+    set_seed(cfg.seed, device_specific=True)
+
     if accelerator.is_main_process:
         accelerator.init_trackers(
             project_name=cfg.project_name,

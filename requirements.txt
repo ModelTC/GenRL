@@ -39,4 +39,6 @@ paddlepaddle-gpu==2.6.2
 paddleocr==2.9.1
 python-Levenshtein
 pyyaml
-
+# HPSv3
+flash-attn==2.7.4.post1
+hpsv3==1.0.0
