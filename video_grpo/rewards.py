@@ -1,7 +1,11 @@
 import importlib
 import torch
 import inspect
-from video_grpo.reward import video_ocr_score
+from video_grpo.reward import (
+    video_ocr_score,
+    hpsv3_general_score,
+    hpsv3_percentile_score,
+)
 
 
 def load_reward_fn(name: str, device, module_path: str | None = None):
@@ -14,6 +18,8 @@ def load_reward_fn(name: str, device, module_path: str | None = None):
         return fn(device) if callable(fn) else fn
     builtin = {
         "video_ocr": video_ocr_score,
+        "hpsv3_general": hpsv3_general_score,
+        "hpsv3_percentile": hpsv3_percentile_score,
     }
     if name in builtin:
         fn = builtin[name]

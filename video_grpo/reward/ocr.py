@@ -6,16 +6,7 @@ from paddleocr import PaddleOCR
 from Levenshtein import distance
 from loguru import logger
 
-
-def _prepare_images(images):
-    if isinstance(images, torch.Tensor):
-        # Align with flow_grpo: handle 4D (NCHW) and 5D (NFCHW) tensors.
-        if images.dim() == 4 and images.shape[1] == 3:
-            images = images.permute(0, 2, 3, 1)  # NCHW -> NHWC
-        elif images.dim() == 5 and images.shape[2] == 3:
-            images = images.permute(0, 1, 3, 4, 2)  # NFCHW -> NFHWC
-        images = (images * 255).round().clamp(0, 255).to(torch.uint8).cpu().numpy()
-    return images
+from .utils import prepare_images
 
 
 def video_ocr_score():
@@ -36,7 +27,7 @@ def video_ocr_score():
         # Align with flow_grpo: take text inside quotes if present, strip spaces/lower.
         prompts_clean = [p.split('"')[1] if '"' in p else p for p in prompts]
         prompts_clean = [p.replace(" ", "").lower() for p in prompts_clean]
-        images_np = _prepare_images(images)
+        images_np, _ = prepare_images(images)
 
         rewards = []
         for img, prompt in zip(images_np, prompts_clean):
