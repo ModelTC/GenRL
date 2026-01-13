@@ -18,7 +18,7 @@ def sde_step_with_logprob(
     prev_sample: Optional[torch.FloatTensor] = None,
     generator: Optional[torch.Generator] = None,
     sde_type: Optional[str] = "flow_sde",
-    determistic: bool = False,
+    deterministic: bool = False,
     return_sqrt_dt_and_std_dev_t: bool = False,
     diffusion_clip: bool = False,
     diffusion_clip_value: float = 0.45,
@@ -35,7 +35,7 @@ def sde_step_with_logprob(
         prev_sample: Optional precomputed previous sample (mutually exclusive with generator).
         generator: Optional RNG for sampling prev_sample.
         sde_type: Type of SDE, either 'flow_sde' or 'flow_cps'.
-        determistic: If True, no noise added (deterministic update).
+        deterministic: If True, no noise added (deterministic update).
         return_sqrt_dt_and_std_dev_t: If True, also return std_dev_t and sqrt(-dt).
         diffusion_clip: If True, clip the std_dev_t to the diffusion_clip_value.
         diffusion_clip_value: Value to clip the std_dev_t to.
@@ -96,7 +96,7 @@ def sde_step_with_logprob(
                 prev_sample_mean + std_dev_t * torch.sqrt(-1 * dt) * variance_noise
             )
 
-        if determistic:
+        if deterministic:
             prev_sample = sample + dt * model_output
 
         log_prob = (
@@ -123,7 +123,7 @@ def sde_step_with_logprob(
             )
             prev_sample = prev_sample_mean + std_dev_t * variance_noise
 
-        if determistic:
+        if deterministic:
             prev_sample = (
                 pred_original_sample * (1 - sigma_prev) + noise_estimate * sigma_prev
             )
@@ -183,7 +183,7 @@ def wan_pipeline_with_logprob(
     ] = None,
     callback_on_step_end_tensor_inputs: List[str] = ["latents"],
     max_sequence_length: int = 512,
-    determistic: bool = False,
+    deterministic: bool = False,
     kl_reward: float = 0.0,
     noise_level: float = 0.7,
     sde_type: Optional[str] = "flow_sde",
@@ -312,7 +312,7 @@ def wan_pipeline_with_logprob(
                 latents.float(),
                 noise_level=noise_level,
                 sde_type=sde_type,
-                determistic=determistic,
+                deterministic=deterministic,
                 diffusion_clip=diffusion_clip,
                 diffusion_clip_value=diffusion_clip_value,
             )
@@ -333,7 +333,7 @@ def wan_pipeline_with_logprob(
                     "negative_prompt_embeds", negative_prompt_embeds
                 )
 
-            if kl_reward > 0 and not determistic:
+            if kl_reward > 0 and not deterministic:
                 latent_model_input = (
                     torch.cat([latents_ori] * 2)
                     if self.do_classifier_free_guidance
@@ -382,7 +382,7 @@ def wan_pipeline_with_logprob(
                     noise_level=noise_level,
                     sde_type=sde_type,
                     prev_sample=prev_latents.float(),
-                    determistic=determistic,
+                    deterministic=deterministic,
                     diffusion_clip=diffusion_clip,
                     diffusion_clip_value=diffusion_clip_value,
                 )

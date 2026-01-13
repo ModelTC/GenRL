@@ -2,6 +2,8 @@ import numpy as np
 from collections import defaultdict
 import torch
 
+from video_grpo.constants import EPSILON
+
 
 class PerPromptStatTracker:
     def __init__(self, use_global_std: bool = False, max_group_std: bool = False):
@@ -46,7 +48,7 @@ class PerPromptStatTracker:
         if self.max_group_std and len(unique) > 0:
             prompt_stds = []
             for prompt in unique:
-                prompt_std = np.std(self.stats[prompt], axis=0, keepdims=True) + 1e-4
+                prompt_std = np.std(self.stats[prompt], axis=0, keepdims=True) + EPSILON
                 prompt_stds.append(prompt_std)
             # Find the maximum std value across all prompts
             max_std_value = max(np.max(std) for std in prompt_stds)
@@ -58,11 +60,11 @@ class PerPromptStatTracker:
             prompt_rewards = rewards[prompts == prompt]
             mean = np.mean(self.stats[prompt], axis=0, keepdims=True)
             if self.use_global_std:
-                std = np.std(rewards, axis=0, keepdims=True) + 1e-4
+                std = np.std(rewards, axis=0, keepdims=True) + EPSILON
             elif self.max_group_std:
                 std = max_std
             else:
-                std = np.std(self.stats[prompt], axis=0, keepdims=True) + 1e-4
+                std = np.std(self.stats[prompt], axis=0, keepdims=True) + EPSILON
             if mode == "grpo":
                 advantages[prompts == prompt] = (prompt_rewards - mean) / std
             elif mode == "rwr":

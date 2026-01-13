@@ -64,6 +64,7 @@ train:
   full_finetune: false
   lora_path: null
   loss_reweighting: null
+  weight_advantages: false  # If true, compute advantages for each reward separately, then weight them; if false (default), weight rewards first then compute advantages
   lora_r: 32
   lora_alpha: 64
   lora_target_modules:

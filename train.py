@@ -13,11 +13,12 @@ def main():
         None. Side effects: starts training.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, required=True, help="Path to JSON config")
+    parser.add_argument("--config", type=str, required=True, help="Path to YAML config")
     args = parser.parse_args()
     cfg = load_config(args.config)
-    trainer_fn = get_trainer(getattr(cfg, "trainer", "wan"))
-    trainer_fn(cfg)
+    trainer_cls = get_trainer(getattr(cfg, "trainer", "wan"))
+    trainer = trainer_cls(cfg)
+    trainer.train()
 
 
 if __name__ == "__main__":

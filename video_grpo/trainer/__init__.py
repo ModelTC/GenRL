@@ -1,10 +1,18 @@
-from video_grpo.trainer import wan_trainer
+from video_grpo.trainer.wan_trainer import WanTrainer
 
 
 def get_trainer(name: str = "wan"):
+    """Get trainer class by name.
+
+    Args:
+        name: Name of the trainer (e.g., 'wan').
+
+    Returns:
+        Trainer class.
+    """
     name = name.lower()
     if name == "wan":
-        return wan_trainer.run
+        return WanTrainer
     raise ValueError(f"Unknown trainer: {name}")
 
 

@@ -42,8 +42,21 @@ def load_reward_fn(name: str, device, module_path: str | None = None):
     return _fn
 
 
-def multi_score(device, reward_cfg, module_path: str | None = None):
-    """Compose multiple reward heads defined in reward_cfg dict name->weight."""
+def multi_score(
+    device, reward_cfg, module_path: str | None = None, return_raw_scores: bool = False
+):
+    """Compose multiple reward heads defined in reward_cfg dict name->weight.
+
+    Args:
+        device: Device to run rewards on.
+        reward_cfg: Dict mapping reward name to weight.
+        module_path: Optional custom module path for reward functions.
+        return_raw_scores: If True, also return unweighted scores in scores dict with '_raw' suffix.
+
+    Returns:
+        A function that returns (scores_dict, metadata_dict).
+        If return_raw_scores=True, scores_dict contains both weighted (name) and raw (name_raw) scores.
+    """
     reward_fns = {}
     weights = {}
     for name, weight in reward_cfg.items():
@@ -59,8 +72,12 @@ def multi_score(device, reward_cfg, module_path: str | None = None):
                 val = out.get("avg", out.get("reward", out))
             else:
                 val = out
-            scores[name] = val * weights[name]
-        stacked = torch.stack([v for v in scores.values()], dim=0)
+            if return_raw_scores:
+                scores[f"{name}_raw"] = val  # Store raw (unweighted) scores
+            scores[name] = val * weights[name]  # Store weighted scores
+        stacked = torch.stack(
+            [v for v in [scores[name] for name in reward_cfg.keys()]], dim=0
+        )
         scores["avg"] = stacked.mean(0)
         return scores, {}
 

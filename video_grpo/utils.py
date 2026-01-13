@@ -178,18 +178,26 @@ def log_videos(
         out_path = os.path.join(video_dir, f"{tag}_{step}_{idx}.mp4")
         imageio.mimsave(out_path, frames, fps=16, codec="libx264", format="FFMPEG")
         video_paths.append(out_path)
+    # Collect all raw reward keys (ending with '_raw')
+    # Note: raw_keys should always exist since reward_fn is called with return_raw_scores=True
+    raw_keys = [k for k in rewards.keys() if k.endswith("_raw")]
+    raw_keys.sort()  # Sort for consistent ordering
+
     accelerator.log(
         {
             f"{tag}_video": [
                 wandb.Video(
                     path,
-                    caption=f"{prompt:.100} | avg: {avg_reward:.2f}",
+                    caption=f"{prompt:.20} | "
+                    + ", ".join(
+                        f"{key}: {rewards[key][sample_idx]:.2f}" for key in raw_keys
+                    ),
                     format="mp4",
                 )
-                for path, prompt, avg_reward in zip(
+                for path, prompt, sample_idx in zip(
                     video_paths,
-                    [prompts[i] for i in sample_indices],
-                    [rewards["avg"][i] for i in sample_indices],
+                    [prompts[idx] for idx in sample_indices],
+                    sample_indices,
                 )
             ]
         },
@@ -197,144 +205,17 @@ def log_videos(
     )
 
 
-def save_ckpt(
-    cfg: Any,
-    transformer: torch.nn.Module,
-    global_step: int,
-    epoch: int,
-    accelerator: Accelerator,
-    ema: Optional[Any],
-    transformer_params: List[torch.nn.Parameter],
-    current_epoch_tag: int,
-) -> None:
-    """Save state, EMA, metadata, and unwrapped model checkpoint.
-
-    Args:
-        cfg: Training config.
-        transformer: Potentially wrapped transformer being trained.
-        global_step: Current global step.
-        epoch: Current epoch.
-        accelerator: Accelerator for saving state.
-        ema: EMA wrapper (may be None if disabled).
-        transformer_params: List of trainable parameters for EMA swap.
-        current_epoch_tag: Sampler epoch_tag for resume alignment.
-    """
-    # save_dir already contains run_name, so checkpoints will be saved in run directory
-    checkpoints_dir = os.path.join(cfg.paths.save_dir, "checkpoints")
-    save_root = os.path.join(checkpoints_dir, f"checkpoint-{global_step}")
-
-    if accelerator.is_main_process:
-        os.makedirs(save_root, exist_ok=True)
-    metadata = {
-        "global_step": global_step,
-        "epoch": epoch,
-        "current_epoch_tag": current_epoch_tag,
-        "run_name": cfg.run_name,
-    }
-    accelerator.save_state(save_root)
-    # Save EMA per-rank to avoid FSDP shard mismatches.
-    if cfg.train.ema:
-        ema_dir = os.path.join(save_root, "ema")
-        if accelerator.is_main_process:
-            os.makedirs(ema_dir, exist_ok=True)
-        accelerator.wait_for_everyone()
-        ema_path = os.path.join(
-            ema_dir, f"ema_state_rank{accelerator.process_index}.pt"
-        )
-        torch.save(ema.state_dict(), ema_path)
-
-    # Apply EMA weights to model before saving (on all processes, before unwrap)
-    if cfg.train.ema:
-        ema.copy_ema_to(transformer_params, store_temp=True)
-
-    # Unwrap model on all processes (needed to avoid FSDP unshard in save_pretrained)
-    #
-    # Evidence that save_pretrained triggers unshard without unwrap:
-    # 1. FSDP.state_dict() calls _unshard_params_for_summon() to gather sharded parameters
-    # 2. PEFT's save_pretrained() calls get_peft_model_state_dict() which calls model.state_dict()
-    # 3. Without unwrap, model.state_dict() on FSDP-wrapped model triggers unshard operations
-    # 4. Unshard requires all processes to participate via all_gather, which can deadlock
-    #    if processes are not synchronized (e.g., only main process calls save_pretrained)
-    #
-    # Solution: unwrap_model() removes FSDP wrapper via extract_model_from_parallel(),
-    # which checks isinstance(model, FSDP) and extracts the underlying module.
-    # After unwrap, state_dict() operates on the base model without triggering unshard.
-    base_transformer = unwrap_model(transformer, accelerator)
-
-    # Prepare directories (only on main process)
-    if accelerator.is_main_process:
-        unwrap_dir = os.path.join(save_root, "unwrapped_model")
-        os.makedirs(unwrap_dir, exist_ok=True)
-        transformer_dir = os.path.join(unwrap_dir, "transformer")
-    else:
-        transformer_dir = None
-
-    # Critical: save_pretrained may call model.state_dict() internally:
-    # - For LoRA: PeftModel.save_pretrained -> get_peft_model_state_dict -> model.state_dict()
-    # - For full finetune: PreTrainedModel.save_pretrained -> model.state_dict()
-    # Even after unwrap, if there are nested FSDP modules, state_dict() may trigger unshard
-    # Solution: Get state_dict on ALL processes first (this ensures all processes participate in unshard if needed)
-    # Then pass it to save_pretrained to avoid calling model.state_dict() again
-    # This is safer than relying on unwrap to remove all FSDP wrappers
-    # Note: Even if unwrap removed top-level FSDP, nested FSDP modules may still exist.
-    # Calling state_dict() on all processes ensures all participate in unshard if needed.
-    # If unshard is triggered, it will synchronize all processes internally via all_gather
-    state_dict_to_save = base_transformer.state_dict()
-
-    try:
-        if accelerator.is_main_process:
-            # Pass state_dict explicitly to avoid save_pretrained calling model.state_dict() again
-            base_transformer.save_pretrained(
-                transformer_dir, state_dict=state_dict_to_save
-            )
-
-            with open(os.path.join(save_root, "metadata.json"), "w") as f:
-                json.dump(metadata, f)
-    finally:
-        if cfg.train.ema:
-            ema.copy_temp_to(transformer_params)
-
-    # Clean up old checkpoints after successful save (only on main process)
-    if (
-        accelerator.is_main_process
-        and cfg.num_checkpoint_limit is not None
-        and cfg.num_checkpoint_limit > 0
-    ):
-        if os.path.exists(checkpoints_dir):
-            # Get all checkpoint directories
-            checkpoint_folders = []
-            for item in os.listdir(checkpoints_dir):
-                checkpoint_path = os.path.join(checkpoints_dir, item)
-                if os.path.isdir(checkpoint_path) and item.startswith("checkpoint-"):
-                    # Extract step number from folder name (e.g., "checkpoint-120" -> 120)
-                    match = re.search(r"checkpoint-(\d+)", item)
-                    if match:
-                        step_num = int(match.group(1))
-                        checkpoint_folders.append((step_num, checkpoint_path))
-
-            # Sort by step number (oldest first)
-            checkpoint_folders.sort(key=lambda x: x[0])
-
-            # Delete oldest checkpoints if we exceed the limit
-            # After save, we now have len(checkpoint_folders) checkpoints total
-            if len(checkpoint_folders) > cfg.num_checkpoint_limit:
-                num_to_delete = len(checkpoint_folders) - cfg.num_checkpoint_limit
-                for step_num, folder_path in checkpoint_folders[:num_to_delete]:
-                    shutil.rmtree(folder_path)
-                    print(f"Deleted old checkpoint: checkpoint-{step_num}")
-
-    # Final synchronization: ensure all processes complete all save operations before returning
-    accelerator.wait_for_everyone()
-
-
 def calculate_zero_std_ratio(
-    prompts: List[str], gathered_rewards: Dict[str, np.ndarray]
+    prompts: List[str],
+    gathered_rewards: Dict[str, np.ndarray],
+    reward_key: str = "ori_avg",
 ) -> float:
     """Compute zero-std ratio for rewards grouped by prompt.
 
     Args:
         prompts: List of prompt strings.
-        gathered_rewards: Dict containing 'ori_avg' reward array.
+        gathered_rewards: Dict containing reward arrays.
+        reward_key: Key in gathered_rewards to use for calculation. Defaults to 'ori_avg'.
 
     Returns:
         Fraction of prompts whose reward std is exactly zero.
@@ -343,7 +224,12 @@ def calculate_zero_std_ratio(
     unique_prompts, inverse_indices, counts = np.unique(
         prompt_array, return_inverse=True, return_counts=True
     )
-    grouped_rewards = gathered_rewards["ori_avg"][np.argsort(inverse_indices)]
+    # Handle multi-dimensional rewards (e.g., (total_batch_size, num_timesteps))
+    # by taking mean across timesteps for std calculation
+    rewards = gathered_rewards[reward_key]
+    if rewards.ndim > 1:
+        rewards = rewards.mean(axis=1)  # Shape: (total_batch_size,)
+    grouped_rewards = rewards[np.argsort(inverse_indices)]
     split_indices = np.cumsum(counts)[:-1]
     reward_groups = np.split(grouped_rewards, split_indices)
     prompt_std_devs = np.array([np.std(group) for group in reward_groups])
