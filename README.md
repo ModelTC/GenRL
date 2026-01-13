@@ -6,7 +6,23 @@
    ```bash
    pip install -r requirements.txt
    ```
-3. OCR extras (for `video_ocr` reward):
+3. Initialize and update submodules (for `videoalign_mq` and `videoalign_ta` rewards):
+   ```bash
+   git submodule update --init --recursive
+   ```
+4. Setup VideoAlign checkpoints (required for `videoalign_mq` and `videoalign_ta` rewards):
+   ```bash
+   cd video_grpo/reward/VideoAlign/checkpoints
+   git lfs install
+   git clone https://huggingface.co/KwaiVGI/VideoReward
+   # Move all files from VideoReward to checkpoints directory
+   mv VideoReward/* .
+   mv VideoReward/.* . 2>/dev/null || true  # Move hidden files, ignore errors if none exist
+   # Remove the empty VideoReward directory
+   rmdir VideoReward
+   cd ../../../..  # Return to project root
+   ```
+5. OCR extras (for `video_ocr` reward):
    ```bash
    pip install paddlepaddle-gpu==2.6.2
    pip install paddleocr==2.9.1

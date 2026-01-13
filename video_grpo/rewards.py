@@ -5,6 +5,8 @@ from video_grpo.reward import (
     video_ocr_score,
     hpsv3_general_score,
     hpsv3_percentile_score,
+    videoalign_mq_score,
+    videoalign_ta_score,
 )
 
 
@@ -20,6 +22,8 @@ def load_reward_fn(name: str, device, module_path: str | None = None):
         "video_ocr": video_ocr_score,
         "hpsv3_general": hpsv3_general_score,
         "hpsv3_percentile": hpsv3_percentile_score,
+        "videoalign_mq": videoalign_mq_score,
+        "videoalign_ta": videoalign_ta_score,
     }
     if name in builtin:
         fn = builtin[name]
