@@ -91,7 +91,13 @@ def wan_sample_epoch(
 
         with autocast():
             with torch.no_grad():
-                videos, latents, log_probs, kls = wan_pipeline_with_logprob(
+                (
+                    videos,
+                    latents,
+                    log_probs,
+                    kls,
+                    timesteps_list,
+                ) = wan_pipeline_with_logprob(
                     pipeline,
                     prompt_embeds=prompt_embeds,
                     negative_prompt_embeds=sample_neg_prompt_embeds,
@@ -108,6 +114,10 @@ def wan_sample_epoch(
                     sde_type=cfg.sample.sde_type,
                     diffusion_clip=cfg.sample.diffusion_clip,
                     diffusion_clip_value=cfg.sample.diffusion_clip_value,
+                    sde_window_size=cfg.sample.sde_window_size or 0,
+                    sde_window_range=tuple(cfg.sample.sde_window_range)
+                    if cfg.sample.sde_window_range
+                    else None,
                 )
 
             latents = torch.stack(latents, dim=1)
@@ -115,7 +125,12 @@ def wan_sample_epoch(
             kls = torch.stack(kls, dim=1)
             kl = kls.detach()
 
-            timesteps = pipeline.scheduler.timesteps.repeat(cfg.sample.batch_size, 1)
+            # Use timesteps from pipeline (window-aware) instead of all timesteps
+            timesteps = (
+                torch.stack(timesteps_list)
+                .unsqueeze(0)
+                .repeat(cfg.sample.batch_size, 1)
+            )
 
             rewards_future = executor.submit(
                 reward_fn, videos, prompts, prompt_metadata, True

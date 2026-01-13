@@ -76,7 +76,14 @@ class WanTrainer(BaseTrainer):
         cfg = self.cfg
 
         # Setup training components
-        num_train_timesteps = int(cfg.sample.num_steps * cfg.train.timestep_fraction)
+        # If sde_window_size > 0, use window size as num_train_timesteps
+        # Otherwise, use timestep_fraction of total steps
+        if cfg.sample.sde_window_size and cfg.sample.sde_window_size > 0:
+            num_train_timesteps = cfg.sample.sde_window_size
+        else:
+            num_train_timesteps = int(
+                cfg.sample.num_steps * cfg.train.timestep_fraction
+            )
         (
             base_gas,
             gradient_accumulation_steps,

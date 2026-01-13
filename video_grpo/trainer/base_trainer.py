@@ -4,6 +4,7 @@ import datetime
 import json
 import re
 import shutil
+import warnings
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional, Tuple
 import torch
@@ -69,6 +70,55 @@ class BaseTrainer(ABC):
                 errors.append(
                     "weight_advantages=True requires at least one reward in reward_fn"
                 )
+
+        # Warn if sde_window_size is 0 but sde_window_range is set
+        # Also validate and truncate sde_window_range to [0, num_steps]
+        if hasattr(self.cfg.sample, "sde_window_size") and hasattr(
+            self.cfg.sample, "sde_window_range"
+        ):
+            sde_window_size = getattr(self.cfg.sample, "sde_window_size", 0) or 0
+            sde_window_range = getattr(self.cfg.sample, "sde_window_range", None)
+            if sde_window_size == 0 and sde_window_range is not None:
+                warnings.warn(
+                    "sde_window_size is 0, so sde_window_range will not be used. "
+                    "Set sde_window_size > 0 to enable window-based training.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+            # Validate and truncate sde_window_range to [0, num_steps]
+            if sde_window_range is not None and hasattr(self.cfg.sample, "num_steps"):
+                num_steps = self.cfg.sample.num_steps
+                original_range = tuple(sde_window_range)
+                new_start = max(0, min(sde_window_range[0], num_steps))
+                new_end = max(0, min(sde_window_range[1], num_steps))
+
+                # Ensure start <= end
+                if new_start > new_end:
+                    new_start = new_end
+
+                truncated_range = (new_start, new_end)
+
+                if truncated_range != original_range:
+                    # Update the config with truncated range
+                    self.cfg.sample.sde_window_range = truncated_range
+                    warnings.warn(
+                        f"sde_window_range {original_range} was truncated to "
+                        f"{truncated_range} to fit within [0, {num_steps}] "
+                        f"(num_steps).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+
+                # Check if truncated range is large enough for sde_window_size
+                if sde_window_size > 0:
+                    range_span = truncated_range[1] - truncated_range[0]
+                    if range_span < sde_window_size:
+                        errors.append(
+                            f"sde_window_range {truncated_range} has span {range_span}, "
+                            f"which is less than sde_window_size {sde_window_size}. "
+                            f"Range span must be >= sde_window_size."
+                        )
 
         if errors:
             raise ConfigurationError(f"Configuration errors: {', '.join(errors)}")

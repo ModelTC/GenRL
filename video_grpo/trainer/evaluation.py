@@ -75,7 +75,7 @@ def wan_eval_once(
         )
         with autocast():
             with torch.no_grad():
-                videos_eval, _, _, _ = wan_pipeline_with_logprob(
+                videos_eval, _, _, _, _ = wan_pipeline_with_logprob(
                     pipeline,
                     prompt_embeds=test_embeds,
                     negative_prompt_embeds=sample_neg_prompt_embeds[: len(test_embeds)],

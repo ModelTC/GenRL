@@ -37,8 +37,8 @@ sample:
   max_group_std: false
   same_latent: false
   noise_level: 0.7
-  sde_window_size: 2 # not used
-  sde_window_range: [0, 10] # not used
+  sde_window_size: 0  # If > 0, only train on a random window of this size. If 0, train on all timesteps (excluding last).
+  sde_window_range: [0, 10]  # Range for randomly selecting the window start position when sde_window_size > 0
   sde_type: flow_sde  # 'flow_sde' or 'flow_cps'
   diffusion_clip: false
   diffusion_clip_value: 0.45

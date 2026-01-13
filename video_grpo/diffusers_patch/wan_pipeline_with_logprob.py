@@ -1,6 +1,7 @@
 from typing import Any, Callable, Dict, List, Optional, Union, Tuple
 import torch
 import contextlib
+import random
 from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
 from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepScheduler
 from diffusers.utils.torch_utils import randn_tensor
@@ -189,6 +190,8 @@ def wan_pipeline_with_logprob(
     sde_type: Optional[str] = "flow_sde",
     diffusion_clip: bool = False,
     diffusion_clip_value: float = 0.45,
+    sde_window_size: int = 0,
+    sde_window_range: Optional[Tuple[int, int]] = None,
 ):
     if isinstance(callback_on_step_end, (PipelineCallback, MultiPipelineCallbacks)):
         callback_on_step_end_tensor_inputs = callback_on_step_end.tensor_inputs
@@ -261,9 +264,33 @@ def wan_pipeline_with_logprob(
         latents,
     )
 
-    all_latents: List[torch.Tensor] = [latents]
+    # Determine SDE window for training
+    # If sde_window_size > 0, randomly select a window within sde_window_range
+    # If sde_window_size == 0, skip window logic and use original behavior
+    use_window = sde_window_size > 0 and sde_window_range is not None
+    if use_window:
+        # Validate sde_window_range
+        if sde_window_range[1] - sde_window_range[0] < sde_window_size:
+            raise ValueError(
+                f"sde_window_range span ({sde_window_range[1] - sde_window_range[0]}) "
+                f"must be >= sde_window_size ({sde_window_size})"
+            )
+        start = random.randint(
+            sde_window_range[0], sde_window_range[1] - sde_window_size
+        )
+        end = start + sde_window_size
+        sde_window = (start, end)
+        # In window mode, initialize all_latents as empty list (will be populated in the loop)
+        # This matches flow_grpo's behavior
+        all_latents: List[torch.Tensor] = []
+    else:
+        sde_window = None
+        # In non-window mode, initialize all_latents with initial latent (matches git HEAD)
+        all_latents: List[torch.Tensor] = [latents]
+
     all_log_probs: List[torch.Tensor] = []
     all_kl: List[torch.Tensor] = []
+    all_timesteps: List[torch.Tensor] = []
 
     # 6. Denoising loop
     num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
@@ -298,6 +325,23 @@ def wan_pipeline_with_logprob(
                 )[0]
                 noise_pred = noise_uncond + guidance_scale * (noise_pred - noise_uncond)
 
+            # Determine noise level based on SDE window
+            if use_window:
+                # Window mode: use noise_level only within the window, otherwise use 0
+                if i < sde_window[0]:
+                    cur_noise_level = 0.0
+                elif i == sde_window[0]:
+                    cur_noise_level = noise_level
+                    # Record the initial latent at the start of the window
+                    all_latents.append(latents)
+                elif i > sde_window[0] and i < sde_window[1]:
+                    cur_noise_level = noise_level
+                else:
+                    cur_noise_level = 0.0
+            else:
+                # Original mode: always use noise_level (sde_window_size == 0)
+                cur_noise_level = noise_level
+
             (
                 latents,
                 log_prob,
@@ -310,7 +354,7 @@ def wan_pipeline_with_logprob(
                 noise_pred.float(),
                 t.unsqueeze(0),
                 latents.float(),
-                noise_level=noise_level,
+                noise_level=cur_noise_level,
                 sde_type=sde_type,
                 deterministic=deterministic,
                 diffusion_clip=diffusion_clip,
@@ -318,8 +362,19 @@ def wan_pipeline_with_logprob(
             )
             prev_latents = latents.clone()
 
-            all_latents.append(latents)
-            all_log_probs.append(log_prob)
+            # Record latents and log_probs
+            if use_window:
+                # Window mode: only record within the SDE window
+                in_window = i >= sde_window[0] and i < sde_window[1]
+                if in_window:
+                    all_latents.append(latents)
+                    all_log_probs.append(log_prob)
+                    all_timesteps.append(t)
+            else:
+                # Original mode: record all timesteps (sde_window_size == 0)
+                all_latents.append(latents)
+                all_log_probs.append(log_prob)
+                all_timesteps.append(t)
 
             if callback_on_step_end is not None:
                 callback_kwargs = {}
@@ -333,68 +388,137 @@ def wan_pipeline_with_logprob(
                     "negative_prompt_embeds", negative_prompt_embeds
                 )
 
-            if kl_reward > 0 and not deterministic:
-                latent_model_input = (
-                    torch.cat([latents_ori] * 2)
-                    if self.do_classifier_free_guidance
-                    else latents_ori
-                )
-                ref_model = getattr(self, "ref_transformer", None)
-                if ref_model is not None:
-                    ref_ctx = contextlib.nullcontext()
-                    target_model = ref_model
-                else:
-                    target_model = self.transformer
-                    ref_ctx = (
-                        target_model.disable_adapter()
-                        if hasattr(target_model, "disable_adapter")
-                        else contextlib.nullcontext()
-                    )
+            # Compute KL reward
+            if use_window:
+                # Window mode: only compute KL within the SDE window
+                in_window = i >= sde_window[0] and i < sde_window[1]
+                if in_window:
+                    if kl_reward > 0 and not deterministic:
+                        latent_model_input = (
+                            torch.cat([latents_ori] * 2)
+                            if self.do_classifier_free_guidance
+                            else latents_ori
+                        )
+                        ref_model = getattr(self, "ref_transformer", None)
+                        if ref_model is not None:
+                            ref_ctx = contextlib.nullcontext()
+                            target_model = ref_model
+                        else:
+                            target_model = self.transformer
+                            ref_ctx = (
+                                target_model.disable_adapter()
+                                if hasattr(target_model, "disable_adapter")
+                                else contextlib.nullcontext()
+                            )
 
-                with ref_ctx:
-                    noise_pred = target_model(
-                        hidden_states=latent_model_input,
-                        timestep=timestep,
-                        encoder_hidden_states=prompt_embeds,
-                        attention_kwargs=attention_kwargs,
-                        return_dict=False,
-                    )[0]
-                noise_pred = noise_pred.to(prompt_embeds.dtype)
-                # perform guidance
-                if self.do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + self.guidance_scale * (
-                        noise_pred_text - noise_pred_uncond
-                    )
+                        with ref_ctx:
+                            noise_pred = target_model(
+                                hidden_states=latent_model_input,
+                                timestep=timestep,
+                                encoder_hidden_states=prompt_embeds,
+                                attention_kwargs=attention_kwargs,
+                                return_dict=False,
+                            )[0]
+                        noise_pred = noise_pred.to(prompt_embeds.dtype)
+                        # perform guidance
+                        if self.do_classifier_free_guidance:
+                            noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                            noise_pred = noise_pred_uncond + self.guidance_scale * (
+                                noise_pred_text - noise_pred_uncond
+                            )
 
-                (
-                    _,
-                    ref_log_prob,
-                    ref_prev_latents_mean,
-                    ref_std_dev_t,
-                    ref_sigma,
-                    ref_sigma_max,
-                ) = sde_step_with_logprob(
-                    self.scheduler,
-                    noise_pred.float(),
-                    t.unsqueeze(0),
-                    latents_ori.float(),
-                    noise_level=noise_level,
-                    sde_type=sde_type,
-                    prev_sample=prev_latents.float(),
-                    deterministic=deterministic,
-                    diffusion_clip=diffusion_clip,
-                    diffusion_clip_value=diffusion_clip_value,
-                )
-                assert std_dev_t == ref_std_dev_t
-                kl = (prev_latents_mean - ref_prev_latents_mean) ** 2 / (
-                    2 * std_dev_t**2
-                )
-                kl = kl.mean(dim=tuple(range(1, kl.ndim)))
-                all_kl.append(kl)
+                        (
+                            _,
+                            ref_log_prob,
+                            ref_prev_latents_mean,
+                            ref_std_dev_t,
+                            ref_sigma,
+                            ref_sigma_max,
+                        ) = sde_step_with_logprob(
+                            self.scheduler,
+                            noise_pred.float(),
+                            t.unsqueeze(0),
+                            latents_ori.float(),
+                            noise_level=noise_level,
+                            sde_type=sde_type,
+                            prev_sample=prev_latents.float(),
+                            deterministic=deterministic,
+                            diffusion_clip=diffusion_clip,
+                            diffusion_clip_value=diffusion_clip_value,
+                        )
+                        assert std_dev_t == ref_std_dev_t
+                        kl = (prev_latents_mean - ref_prev_latents_mean) ** 2 / (
+                            2 * std_dev_t**2
+                        )
+                        kl = kl.mean(dim=tuple(range(1, kl.ndim)))
+                        all_kl.append(kl)
+                    else:
+                        # In window but no KL reward, append zero KL
+                        all_kl.append(torch.zeros(len(latents), device=latents.device))
             else:
-                # no kl reward, we do not need to compute, just put a pre-position value, kl will be 0
-                all_kl.append(torch.zeros(len(latents), device=latents.device))
+                # Original mode: compute KL for all timesteps (sde_window_size == 0)
+                if kl_reward > 0 and not deterministic:
+                    latent_model_input = (
+                        torch.cat([latents_ori] * 2)
+                        if self.do_classifier_free_guidance
+                        else latents_ori
+                    )
+                    ref_model = getattr(self, "ref_transformer", None)
+                    if ref_model is not None:
+                        ref_ctx = contextlib.nullcontext()
+                        target_model = ref_model
+                    else:
+                        target_model = self.transformer
+                        ref_ctx = (
+                            target_model.disable_adapter()
+                            if hasattr(target_model, "disable_adapter")
+                            else contextlib.nullcontext()
+                        )
+
+                    with ref_ctx:
+                        noise_pred = target_model(
+                            hidden_states=latent_model_input,
+                            timestep=timestep,
+                            encoder_hidden_states=prompt_embeds,
+                            attention_kwargs=attention_kwargs,
+                            return_dict=False,
+                        )[0]
+                    noise_pred = noise_pred.to(prompt_embeds.dtype)
+                    # perform guidance
+                    if self.do_classifier_free_guidance:
+                        noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                        noise_pred = noise_pred_uncond + self.guidance_scale * (
+                            noise_pred_text - noise_pred_uncond
+                        )
+
+                    (
+                        _,
+                        ref_log_prob,
+                        ref_prev_latents_mean,
+                        ref_std_dev_t,
+                        ref_sigma,
+                        ref_sigma_max,
+                    ) = sde_step_with_logprob(
+                        self.scheduler,
+                        noise_pred.float(),
+                        t.unsqueeze(0),
+                        latents_ori.float(),
+                        noise_level=noise_level,
+                        sde_type=sde_type,
+                        prev_sample=prev_latents.float(),
+                        deterministic=deterministic,
+                        diffusion_clip=diffusion_clip,
+                        diffusion_clip_value=diffusion_clip_value,
+                    )
+                    assert std_dev_t == ref_std_dev_t
+                    kl = (prev_latents_mean - ref_prev_latents_mean) ** 2 / (
+                        2 * std_dev_t**2
+                    )
+                    kl = kl.mean(dim=tuple(range(1, kl.ndim)))
+                    all_kl.append(kl)
+                else:
+                    # no kl reward, we do not need to compute, just put a pre-position value, kl will be 0
+                    all_kl.append(torch.zeros(len(latents), device=latents.device))
 
             # call the callback, if provided
             if i == len(timesteps) - 1 or (
@@ -423,6 +547,12 @@ def wan_pipeline_with_logprob(
     self.maybe_free_model_hooks()
 
     if not return_dict:
-        return (video, all_latents, all_log_probs, all_kl)
+        return (video, all_latents, all_log_probs, all_kl, all_timesteps)
 
-    return WanPipelineOutput(frames=video), all_latents, all_log_probs, all_kl
+    return (
+        WanPipelineOutput(frames=video),
+        all_latents,
+        all_log_probs,
+        all_kl,
+        all_timesteps,
+    )
