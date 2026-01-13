@@ -3,8 +3,8 @@ project_name: VideoRL
 seed: 42
 num_epochs: 100000
 eval_freq: 30
-save_freq: 2 # 60
-num_checkpoint_limit: 1
+save_freq: 60
+num_checkpoint_limit: 2
 height: 240
 width: 416
 frames: 33
