@@ -850,7 +850,11 @@ class WanTrainer(BaseTrainer):
         )  # Shape: (total_batch_size, num_timesteps)
 
         # log rewards and KL - only log raw scores
-        raw_keys = [k for k in gathered_rewards.keys() if k.endswith("_raw")]
+        raw_keys = [
+            k
+            for k in gathered_rewards.keys()
+            if k.endswith("_raw") and not k.startswith("ori_")
+        ]
         reward_logs = {
             f"reward_{key}": value.mean()
             for key, value in gathered_rewards.items()
