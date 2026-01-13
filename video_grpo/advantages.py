@@ -46,7 +46,8 @@ def _compute_kl_advantages(
         return kl_stat_tracker.update(prompts, -gathered_kl)
     else:
         # Direct normalization on full shape
-        return -_normalize_rewards(gathered_kl)
+        # Normalize negative KL to maintain consistency with per_prompt mode
+        return _normalize_rewards(-gathered_kl)
 
 
 def compute_advantages(
