@@ -31,9 +31,7 @@ def wan_eval_once(
     global_step: int,
     ema: Any | None,
     transformer_params: List[torch.nn.Parameter] | None,
-    log_metrics: Optional[
-        Callable[[Accelerator, dict, int, Optional[str]], None]
-    ] = None,
+    log_metrics: Optional[Callable[[Accelerator, dict, int], None]] = None,
 ):
     """Full eval loop aligned to original behavior: iterate all batches, log rewards/videos.
 
@@ -121,7 +119,7 @@ def wan_eval_once(
         }
         if log_metrics is not None:
             # Use the shared logging helper (will also print to stdout)
-            log_metrics(accelerator, metrics, global_step, prefix="eval")
+            log_metrics(accelerator, metrics, global_step)
         else:
             accelerator.log(metrics, step=global_step)
 

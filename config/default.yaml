@@ -1,4 +1,4 @@
-run_name: wan_flow_grpo
+run_name: debug_1
 project_name: VideoRL
 seed: 42
 num_epochs: 100000

@@ -143,7 +143,6 @@ class BaseTrainer(ABC):
         accelerator: Accelerator,
         metrics: dict[str, Any],
         step: int,
-        prefix: Optional[str] = None,
     ) -> None:
         """Log metrics to trackers and (optionally) to stdout.
 
@@ -152,8 +151,6 @@ class BaseTrainer(ABC):
             metrics: Dictionary of metric name to value. All entries are forwarded
                 to ``accelerator.log``; only scalar-like values are printed.
             step: Global step to use for logging.
-            prefix: Optional string prefix for the stdout log header. If ``None``,
-                a caller context of ``file:line function()`` is used instead.
         """
         # 1) Always log to the configured tracker(s)
         accelerator.log(metrics, step=step)
@@ -161,19 +158,6 @@ class BaseTrainer(ABC):
         # 2) Only main process prints to stdout
         if not accelerator.is_main_process:
             return
-
-        # Derive caller context (file, line, function) for easier debugging
-        caller_frame = inspect.currentframe()
-        if caller_frame is not None and caller_frame.f_back is not None:
-            caller = caller_frame.f_back
-            func_name = caller.f_code.co_name
-            line_no = caller.f_lineno
-            file_name = os.path.basename(caller.f_code.co_filename)
-            caller_ctx = f"{file_name}:{line_no} {func_name}()"
-        else:
-            caller_ctx = "<unknown>"
-
-        header = prefix if prefix is not None else caller_ctx
 
         # Filter to scalar-like metrics only
         scalar_items: dict[str, float] = {}
@@ -225,7 +209,11 @@ class BaseTrainer(ABC):
                 parts.append(f"{k}={v:.4f}")
 
         msg = " ".join(parts)
-        logger.info(f"[step {step}] {header} | {msg}")
+
+        # Use loguru's opt(depth=2) to show caller's location instead of this function's location.
+        # depth=2: skip logger.info() call and log_metrics() function, show actual caller.
+        # The loguru formatter will print file:line function() for the true caller.
+        logger.opt(depth=2).info(f"[step {step}] | {msg}")
 
     def setup_accelerator(self, gradient_accumulation_steps: int) -> Accelerator:
         """Setup Accelerate accelerator.
