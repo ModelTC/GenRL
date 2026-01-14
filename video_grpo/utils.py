@@ -1,5 +1,4 @@
 import os
-import random
 import json
 import hashlib
 import contextlib
@@ -169,7 +168,8 @@ def log_videos(
     video_dir = os.path.join(cfg.paths.save_dir, f"{tag}_videos")
     os.makedirs(video_dir, exist_ok=True)
     num_samples = min(15, len(videos))
-    sample_indices = random.sample(range(len(videos)), num_samples)
+    # Just take the first few samples for logging; this does not affect training.
+    sample_indices = list(range(num_samples))
     video_paths = []
     for idx, i in enumerate(sample_indices):
         video = videos[i]

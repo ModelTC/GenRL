@@ -90,10 +90,16 @@ def wan_eval_once(
                     height=cfg.height,
                     width=cfg.width,
                     deterministic=True,
+                    kl_reward=0,
                     noise_level=cfg.sample.noise_level,
                     sde_type=cfg.sample.sde_type,
                     diffusion_clip=cfg.sample.diffusion_clip,
                     diffusion_clip_value=cfg.sample.diffusion_clip_value,
+                    sde_window_size=0,
+                    sde_window_range=None,
+                    # For evaluation, we don't need to compute KL reward and
+                    # don't need sde_window_size and sde_window_range
+                    # because we are not training
                 )
         rewards_eval, reward_meta = eval_reward_fn(
             videos_eval, test_prompts, test_metadata, False

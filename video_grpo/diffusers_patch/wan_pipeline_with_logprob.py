@@ -275,9 +275,24 @@ def wan_pipeline_with_logprob(
                 f"sde_window_range span ({sde_window_range[1] - sde_window_range[0]}) "
                 f"must be >= sde_window_size ({sde_window_size})"
             )
-        start = random.randint(
-            sde_window_range[0], sde_window_range[1] - sde_window_size
-        )
+        # Use generator if provided (for training reproducibility), otherwise fallback to random
+        if generator is not None:
+            # Extract generator from list if needed
+            if isinstance(generator, list) and len(generator) > 0:
+                gen = generator[0]
+            else:
+                gen = generator
+            # Use torch.randint with generator for deterministic randomness
+            max_start = sde_window_range[1] - sde_window_size
+            start = torch.randint(
+                sde_window_range[0], max_start + 1, (1,), generator=gen, device=device
+            ).item()
+        else:
+            # Fallback to Python random (for eval, where generator may not be provided)
+            # This is safe because eval uses deterministic=True and set_seed at the start
+            start = random.randint(
+                sde_window_range[0], sde_window_range[1] - sde_window_size
+            )
         end = start + sde_window_size
         sde_window = (start, end)
         # In window mode, initialize all_latents as empty list (will be populated in the loop)

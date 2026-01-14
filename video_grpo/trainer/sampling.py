@@ -7,6 +7,7 @@ from accelerate import Accelerator
 from loguru import logger
 
 from video_grpo.config import Config
+from video_grpo.constants import SEED_EPOCH_STRIDE
 from video_grpo.trainer.embeddings import wan_compute_text_embeddings
 from video_grpo.diffusers_patch.wan_pipeline_with_logprob import (
     wan_pipeline_with_logprob,
@@ -83,11 +84,21 @@ def wan_sample_epoch(
             return_tensors="pt",
         ).input_ids.to(accelerator.device)
 
-        generator = None
+        # Always use deterministic generator for reproducibility
+        # If same_latent=True, use per-prompt generators (deterministic per prompt)
+        # If same_latent=False, use a single generator per batch (deterministic per batch)
         if getattr(cfg.sample, "same_latent", False):
             generator = create_generator(
-                prompts, base_seed=epoch * 10000 + i, device=accelerator.device
+                prompts,
+                base_seed=epoch * SEED_EPOCH_STRIDE + i,
+                device=accelerator.device,
             )
+        else:
+            # Use a single deterministic generator for the batch
+            # Seed based on epoch and batch index to ensure reproducibility
+            batch_generator = torch.Generator(device=accelerator.device)
+            batch_generator.manual_seed(cfg.seed + epoch * SEED_EPOCH_STRIDE + i)
+            generator = batch_generator
 
         with autocast():
             with torch.no_grad():

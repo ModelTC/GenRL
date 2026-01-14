@@ -16,7 +16,7 @@ from peft import LoraConfig, get_peft_model, PeftModel
 from loguru import logger
 
 from video_grpo.config import Config
-from video_grpo.constants import ADVANTAGE_EPSILON
+from video_grpo.constants import ADVANTAGE_EPSILON, SEED_EPOCH_STRIDE
 from video_grpo.ema import EMAModuleWrapper
 from video_grpo.data import build_dataloaders
 from video_grpo.stat_tracking import PerPromptStatTracker
@@ -514,7 +514,15 @@ class WanTrainer(BaseTrainer):
             total_batch_size, num_timesteps = samples["timesteps"].shape
 
             for inner_epoch in range(cfg.train.num_inner_epochs):
-                perm = torch.randperm(total_batch_size, device=accelerator.device)
+                # Use deterministic generator for reproducibility
+                # Seed based on epoch and inner_epoch to ensure consistency across runs
+                generator = torch.Generator(device=accelerator.device)
+                generator.manual_seed(
+                    cfg.seed + epoch * SEED_EPOCH_STRIDE + inner_epoch
+                )
+                perm = torch.randperm(
+                    total_batch_size, device=accelerator.device, generator=generator
+                )
                 samples = {k: v[perm] for k, v in samples.items()}
                 perms = torch.stack(
                     [
@@ -915,7 +923,13 @@ class WanTrainer(BaseTrainer):
             false_indices = torch.where(~mask)[0]
             num_to_change = num_batches - (true_count % num_batches)
             if len(false_indices) >= num_to_change:
-                random_indices = torch.randperm(len(false_indices))[:num_to_change]
+                # Use deterministic generator for reproducibility
+                # Seed based on epoch to ensure consistency across runs
+                generator = torch.Generator(device=accelerator.device)
+                generator.manual_seed(cfg.seed + epoch)
+                random_indices = torch.randperm(
+                    len(false_indices), device=accelerator.device, generator=generator
+                )[:num_to_change]
                 mask[false_indices[random_indices]] = True
         self.log_metrics(
             accelerator,
