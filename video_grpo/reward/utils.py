@@ -1,6 +1,8 @@
-import torch
-import numpy as np
+import contextlib
 from typing import Tuple, Union
+
+import numpy as np
+import torch
 
 
 def prepare_images(images: Union[torch.Tensor, np.ndarray]) -> Tuple[np.ndarray, bool]:
@@ -40,3 +42,26 @@ def prepare_images(images: Union[torch.Tensor, np.ndarray]) -> Tuple[np.ndarray,
             images = (images * 255).round().clip(0, 255).astype(np.uint8)
 
     return images, is_video
+
+
+def preserve_accelerate_state():
+    """Context manager to preserve Accelerate global state during reward init."""
+    try:
+        from accelerate.state import AcceleratorState, PartialState
+    except Exception:
+        # If accelerate isn't available, no-op.
+        return contextlib.nullcontext()
+
+    class _StatePreserver:
+        def __enter__(self):
+            self._acc_state = dict(AcceleratorState._shared_state)
+            self._partial_state = dict(PartialState._shared_state)
+
+        def __exit__(self, exc_type, exc, tb):
+            AcceleratorState._shared_state.clear()
+            AcceleratorState._shared_state.update(self._acc_state)
+            PartialState._shared_state.clear()
+            PartialState._shared_state.update(self._partial_state)
+            return False
+
+    return _StatePreserver()

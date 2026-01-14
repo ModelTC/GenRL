@@ -1,4 +1,3 @@
-import contextlib
 import os
 import sys
 import tempfile
@@ -19,31 +18,7 @@ if _HPSV3_ROOT.exists():
 
 from hpsv3 import HPSv3RewardInferencer
 
-
-def _preserve_accelerate_state():
-    """Context manager to preserve Accelerate global state during HPSv3 init."""
-    try:
-        from accelerate.state import AcceleratorState, PartialState
-    except Exception:
-        # If accelerate isn't available, no-op.
-        return contextlib.nullcontext()
-
-    class _StatePreserver:
-        def __enter__(self):
-            self._acc_state = dict(AcceleratorState._shared_state)
-            self._partial_state = dict(PartialState._shared_state)
-
-        def __exit__(self, exc_type, exc, tb):
-            AcceleratorState._shared_state.clear()
-            AcceleratorState._shared_state.update(self._acc_state)
-            PartialState._shared_state.clear()
-            PartialState._shared_state.update(self._partial_state)
-            return False
-
-    return _StatePreserver()
-
-
-from .utils import prepare_images
+from .utils import prepare_images, preserve_accelerate_state
 from video_grpo.utils import fast_init
 
 # Global cache for HPSv3 inferencers to avoid loading the same model multiple times
@@ -72,7 +47,7 @@ def _get_hpsv3_inferencer(device) -> HPSv3RewardInferencer:
     if device_key not in _inferencer_cache:
         # Use fast_init to avoid slow CPU initializations
         # Preserve Accelerate state in case HPSv3's TrainingArguments resets it.
-        with _preserve_accelerate_state():
+        with preserve_accelerate_state():
             with fast_init(device_key, init_weights=False):
                 _inferencer_cache[device_key] = HPSv3RewardInferencer(device=device_key)
 
