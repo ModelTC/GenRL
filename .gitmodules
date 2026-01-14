@@ -1,3 +1,6 @@
 [submodule "video_grpo/reward/VideoAlign"]
 	path = video_grpo/reward/VideoAlign
 	url = https://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@github.com/Harahan/VideoAlign.git
+[submodule "video_grpo/reward/HPSv3"]
+	path = video_grpo/reward/HPSv3
+	url = https://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@github.com/Harahan/HPSv3.git
