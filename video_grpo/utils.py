@@ -10,6 +10,7 @@ import imageio
 import wandb
 import numpy as np
 from accelerate import Accelerator, FullyShardedDataParallelPlugin
+from accelerate.state import PartialState
 from accelerate.utils import ProjectConfiguration
 from diffusers.utils.torch_utils import is_compiled_module
 import torch
@@ -50,6 +51,92 @@ def fast_init(device: torch.device, init_weights: bool = False):
 
     for cls in _ORIGINAL_INITS:
         cls.__init__ = _ORIGINAL_INITS[cls]
+
+
+def safe_get_accelerator_attr(
+    accelerator: Accelerator, attr_name: str, fallback_to_partial_state: bool = True
+):
+    """Safely get an attribute from accelerator, with fallback to PartialState.
+
+    This function handles the case where AcceleratorState._reset_state() was called
+    and accelerator attributes are no longer available. It falls back to PartialState
+    which can recover from environment variables and PyTorch distributed state.
+
+    Args:
+        accelerator: Accelerator instance.
+        attr_name: Name of the attribute to get (e.g., 'device', 'num_processes', 'process_index').
+        fallback_to_partial_state: Whether to fallback to PartialState if attribute is not available.
+
+    Returns:
+        The requested attribute value, or None if not available and fallback is disabled.
+    """
+    try:
+        return getattr(accelerator, attr_name)
+    except AttributeError:
+        if fallback_to_partial_state:
+            partial_state = PartialState()
+            return getattr(partial_state, attr_name, None)
+        return None
+
+
+def get_device(accelerator: Accelerator) -> torch.device:
+    """Safely get device from accelerator.
+
+    Args:
+        accelerator: Accelerator instance.
+
+    Returns:
+        Device (torch.device) from accelerator or PartialState fallback.
+    """
+    return safe_get_accelerator_attr(accelerator, "device")
+
+
+def get_num_processes(accelerator: Accelerator) -> int:
+    """Safely get num_processes from accelerator.
+
+    Args:
+        accelerator: Accelerator instance.
+
+    Returns:
+        Number of processes from accelerator or PartialState fallback.
+    """
+    return safe_get_accelerator_attr(accelerator, "num_processes")
+
+
+def get_process_index(accelerator: Accelerator) -> int:
+    """Safely get process_index from accelerator.
+
+    Args:
+        accelerator: Accelerator instance.
+
+    Returns:
+        Process index from accelerator or PartialState fallback.
+    """
+    return safe_get_accelerator_attr(accelerator, "process_index")
+
+
+def get_is_main_process(accelerator: Accelerator) -> bool:
+    """Safely get is_main_process from accelerator.
+
+    Args:
+        accelerator: Accelerator instance.
+
+    Returns:
+        Whether this is the main process from accelerator or PartialState fallback.
+    """
+    return safe_get_accelerator_attr(accelerator, "is_main_process")
+
+
+def get_is_local_main_process(accelerator: Accelerator) -> bool:
+    """Safely get is_local_main_process from accelerator.
+
+    Args:
+        accelerator: Accelerator instance.
+
+    Returns:
+        Whether this is the local main process from accelerator or PartialState fallback.
+    """
+    return safe_get_accelerator_attr(accelerator, "is_local_main_process")
 
 
 def build_accelerator(

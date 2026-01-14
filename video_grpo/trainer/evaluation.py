@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import tqdm
 from accelerate import Accelerator
+from video_grpo.utils import get_device
 from accelerate.utils import set_seed
 from loguru import logger
 
@@ -74,7 +75,7 @@ def wan_eval_once(
             text_encoders,
             tokenizers,
             max_sequence_length=512,
-            device=accelerator.device,
+            device=get_device(accelerator),
         )
         with autocast():
             with torch.no_grad():
@@ -107,7 +108,9 @@ def wan_eval_once(
         last_batch = (videos_eval, test_prompts, rewards_eval, reward_meta)
         for key, value in rewards_eval.items():
             gathered = (
-                accelerator.gather(torch.as_tensor(value, device=accelerator.device))
+                accelerator.gather(
+                    torch.as_tensor(value, device=get_device(accelerator))
+                )
                 .cpu()
                 .numpy()
             )

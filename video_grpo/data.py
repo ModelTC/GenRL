@@ -3,6 +3,8 @@ import os
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
+from accelerate.state import PartialState
+from video_grpo.utils import get_num_processes, get_process_index
 from torch.utils.data import DataLoader, Dataset, Sampler
 from loguru import logger
 
@@ -351,12 +353,16 @@ def build_dataloaders(
             "Only general_ocr, geneval, or filtered_prompts prompt_fn supported"
         )
 
+    # Get num_processes and process_index safely
+    num_processes = get_num_processes(accelerator)
+    process_index = get_process_index(accelerator)
+
     train_sampler = DistributedKRepeatSampler(
         dataset=train_dataset,
         batch_size=cfg.sample.batch_size,
         k=cfg.sample.num_video_per_prompt,
-        num_replicas=accelerator.num_processes,
-        rank=accelerator.process_index,
+        num_replicas=num_processes,
+        rank=process_index,
         seed=cfg.seed,
     )
 

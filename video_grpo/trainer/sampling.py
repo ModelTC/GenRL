@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict, List
 import torch
 import tqdm
 from accelerate import Accelerator
+from video_grpo.utils import get_device
 from loguru import logger
 
 from video_grpo.config import Config
@@ -74,7 +75,7 @@ def wan_sample_epoch(
             text_encoders,
             tokenizers,
             max_sequence_length=512,
-            device=accelerator.device,
+            device=get_device(accelerator),
         )
         prompt_ids = tokenizers[0](
             prompts,
@@ -82,7 +83,7 @@ def wan_sample_epoch(
             max_length=512,
             truncation=True,
             return_tensors="pt",
-        ).input_ids.to(accelerator.device)
+        ).input_ids.to(get_device(accelerator))
 
         # Always use deterministic generator for reproducibility
         # If same_latent=True, use per-prompt generators (deterministic per prompt)
@@ -91,12 +92,12 @@ def wan_sample_epoch(
             generator = create_generator(
                 prompts,
                 base_seed=epoch * SEED_EPOCH_STRIDE + i,
-                device=accelerator.device,
+                device=get_device(accelerator),
             )
         else:
             # Use a single deterministic generator for the batch
             # Seed based on epoch and batch index to ensure reproducibility
-            batch_generator = torch.Generator(device=accelerator.device)
+            batch_generator = torch.Generator(device=get_device(accelerator))
             batch_generator.manual_seed(cfg.seed + epoch * SEED_EPOCH_STRIDE + i)
             generator = batch_generator
 
@@ -179,7 +180,7 @@ def wan_sample_epoch(
     ):
         rewards, _ = sample["rewards"].result()
         sample["rewards"] = {
-            key: torch.as_tensor(value, device=accelerator.device).float()
+            key: torch.as_tensor(value, device=get_device(accelerator)).float()
             for key, value in rewards.items()
         }
 

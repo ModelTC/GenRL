@@ -2,12 +2,40 @@ import torch
 import numpy as np
 import tempfile
 import os
-from typing import List, Union
+from typing import List, Union, Dict
 from PIL import Image
 from hpsv3 import HPSv3RewardInferencer
 from loguru import logger
 
 from .utils import prepare_images
+
+# Global cache for HPSv3 inferencers to avoid loading the same model multiple times
+_inferencer_cache: Dict[torch.device, HPSv3RewardInferencer] = {}
+
+
+def _get_hpsv3_inferencer(device) -> HPSv3RewardInferencer:
+    """Get or create HPSv3 inferencer for the given device.
+
+    Args:
+        device: Device to load the inferencer on (can be torch.device, str, or other device-like object).
+
+    Returns:
+        HPSv3RewardInferencer instance (shared across calls for the same device).
+    """
+    # Normalize device to torch.device for consistent caching
+    if isinstance(device, torch.device):
+        device_key = device
+    elif isinstance(device, str):
+        device_key = torch.device(device)
+    else:
+        # Try to convert to torch.device (handles cases like cuda:0, cpu, etc.)
+        device_key = torch.device(device)
+
+    # Check if we already have an inferencer for this device
+    if device_key not in _inferencer_cache:
+        _inferencer_cache[device_key] = HPSv3RewardInferencer(device=device_key)
+
+    return _inferencer_cache[device_key]
 
 
 def _save_frame_to_temp(frame: np.ndarray) -> str:
@@ -35,7 +63,7 @@ def hpsv3_general_score(device):
     Returns:
         A function that takes (images, prompts, metadata, only_strict) and returns ({"avg": rewards}, {}).
     """
-    inferencer = HPSv3RewardInferencer(device=device)
+    inferencer = _get_hpsv3_inferencer(device)
     general_prompt = "A high-quality image"
 
     def _fn(
@@ -120,7 +148,7 @@ def hpsv3_percentile_score(device):
     Returns:
         A function that takes (images, prompts, metadata, only_strict) and returns ({"avg": rewards}, {}).
     """
-    inferencer = HPSv3RewardInferencer(device=device)
+    inferencer = _get_hpsv3_inferencer(device)
 
     def _fn(
         images: Union[List[Image.Image], np.ndarray, torch.Tensor],

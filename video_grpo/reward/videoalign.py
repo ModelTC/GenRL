@@ -22,14 +22,32 @@ _inferencer_cache = {}
 
 
 def _get_inferencer(
-    checkpoint_path: str, device: str, dtype: torch.dtype
+    checkpoint_path: str, device, dtype: torch.dtype
 ) -> VideoVLMRewardInference:
-    """Get or create VideoAlign inferencer (cached per checkpoint/device/dtype)."""
-    cache_key = (checkpoint_path, device, dtype)
+    """Get or create VideoAlign inferencer (cached per checkpoint/device/dtype).
+
+    Args:
+        checkpoint_path: Path to VideoAlign checkpoint directory.
+        device: Device to run on (can be torch.device, str, or other device-like object).
+        dtype: Data type for the model.
+
+    Returns:
+        VideoVLMRewardInference instance (cached per checkpoint/device/dtype).
+    """
+    # Normalize device to string for consistent caching and VideoVLMRewardInference compatibility
+    if isinstance(device, torch.device):
+        device_str = str(device)
+    elif isinstance(device, str):
+        device_str = device
+    else:
+        # Try to convert to string (handles cases like cuda:0, cpu, etc.)
+        device_str = str(device)
+
+    cache_key = (checkpoint_path, device_str, dtype)
     if cache_key not in _inferencer_cache:
         _inferencer_cache[cache_key] = VideoVLMRewardInference(
             load_from_pretrained=checkpoint_path,
-            device=device,
+            device=device_str,
             dtype=dtype,
         )
     return _inferencer_cache[cache_key]
@@ -91,7 +109,7 @@ def videoalign_mq_score(device, checkpoint_path: str = None):
     Uses grayscale videos to focus on motion characteristics rather than color.
 
     Args:
-        device: Device to run the model on (e.g., 'cuda:0').
+        device: Device to run the model on (can be torch.device, str, or other device-like object).
         checkpoint_path: Path to VideoAlign checkpoint directory.
                          Defaults to './video_grpo/reward/VideoAlign/checkpoints'.
 
@@ -106,6 +124,14 @@ def videoalign_mq_score(device, checkpoint_path: str = None):
 
     # Resolve absolute path
     checkpoint_path = os.path.abspath(checkpoint_path)
+
+    # Normalize device for tensor creation (torch.device or str both work)
+    if isinstance(device, torch.device):
+        device_for_tensor = device
+    elif isinstance(device, str):
+        device_for_tensor = torch.device(device)
+    else:
+        device_for_tensor = torch.device(str(device))
 
     dtype = torch.bfloat16  # VideoAlign typically uses bfloat16
     inferencer = _get_inferencer(checkpoint_path, device, dtype)
@@ -152,7 +178,9 @@ def videoalign_mq_score(device, checkpoint_path: str = None):
                 mq_score = video_rewards[0]["MQ"]
                 rewards.append(mq_score)
 
-            rewards = torch.tensor(rewards, dtype=torch.float32, device=device)
+            rewards = torch.tensor(
+                rewards, dtype=torch.float32, device=device_for_tensor
+            )
             return {"avg": rewards}, {}
 
         finally:
@@ -173,7 +201,7 @@ def videoalign_ta_score(device, checkpoint_path: str = None):
     Uses original color videos to preserve semantic correspondence assessment.
 
     Args:
-        device: Device to run the model on (e.g., 'cuda:0').
+        device: Device to run the model on (can be torch.device, str, or other device-like object).
         checkpoint_path: Path to VideoAlign checkpoint directory.
                          Defaults to './video_grpo/reward/VideoAlign/checkpoints'.
 
@@ -188,6 +216,14 @@ def videoalign_ta_score(device, checkpoint_path: str = None):
 
     # Resolve absolute path
     checkpoint_path = os.path.abspath(checkpoint_path)
+
+    # Normalize device for tensor creation (torch.device or str both work)
+    if isinstance(device, torch.device):
+        device_for_tensor = device
+    elif isinstance(device, str):
+        device_for_tensor = torch.device(device)
+    else:
+        device_for_tensor = torch.device(str(device))
 
     dtype = torch.bfloat16  # VideoAlign typically uses bfloat16
     inferencer = _get_inferencer(checkpoint_path, device, dtype)
@@ -232,7 +268,9 @@ def videoalign_ta_score(device, checkpoint_path: str = None):
                 ta_score = video_rewards[0]["TA"]
                 rewards.append(ta_score)
 
-            rewards = torch.tensor(rewards, dtype=torch.float32, device=device)
+            rewards = torch.tensor(
+                rewards, dtype=torch.float32, device=device_for_tensor
+            )
             return {"avg": rewards}, {}
 
         finally:

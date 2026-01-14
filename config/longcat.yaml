@@ -1,12 +1,12 @@
-run_name: wan_2_1_t2v_1_3b_diffusers
-project_name: LongCat
+run_name: wan_2_1_t2v_1_3b_longcat
+project_name: VideoRL
 seed: 42
 allow_tf32: true
 cudnn_deterministic: true
 cudnn_benchmark: false
 num_epochs: 100000
 eval_freq: 30
-initial_eval: false
+initial_eval: true
 save_freq: 100
 num_checkpoint_limit: 3
 height: 480
