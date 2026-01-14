@@ -8,6 +8,7 @@ from hpsv3 import HPSv3RewardInferencer
 from loguru import logger
 
 from .utils import prepare_images
+from video_grpo.utils import fast_init
 
 # Global cache for HPSv3 inferencers to avoid loading the same model multiple times
 _inferencer_cache: Dict[torch.device, HPSv3RewardInferencer] = {}
@@ -33,7 +34,9 @@ def _get_hpsv3_inferencer(device) -> HPSv3RewardInferencer:
 
     # Check if we already have an inferencer for this device
     if device_key not in _inferencer_cache:
-        _inferencer_cache[device_key] = HPSv3RewardInferencer(device=device_key)
+        # Use fast_init to avoid slow CPU initializations
+        with fast_init(device_key, init_weights=False):
+            _inferencer_cache[device_key] = HPSv3RewardInferencer(device=device_key)
 
     return _inferencer_cache[device_key]
 

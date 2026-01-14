@@ -15,6 +15,7 @@ if _videoalign_path not in sys.path:
 
 from inference import VideoVLMRewardInference
 from .utils import prepare_images
+from video_grpo.utils import fast_init
 
 
 # Global cache for VideoAlign inferencer
@@ -45,11 +46,21 @@ def _get_inferencer(
 
     cache_key = (checkpoint_path, device_str, dtype)
     if cache_key not in _inferencer_cache:
-        _inferencer_cache[cache_key] = VideoVLMRewardInference(
-            load_from_pretrained=checkpoint_path,
-            device=device_str,
-            dtype=dtype,
-        )
+        # Normalize device to torch.device for fast_init
+        if isinstance(device, torch.device):
+            device_for_fast_init = device
+        elif isinstance(device, str):
+            device_for_fast_init = torch.device(device)
+        else:
+            device_for_fast_init = torch.device(str(device))
+
+        # Use fast_init to avoid slow CPU initializations
+        with fast_init(device_for_fast_init, init_weights=False):
+            _inferencer_cache[cache_key] = VideoVLMRewardInference(
+                load_from_pretrained=checkpoint_path,
+                device=device_str,
+                dtype=dtype,
+            )
     return _inferencer_cache[cache_key]
 
 
