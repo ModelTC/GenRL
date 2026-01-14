@@ -458,7 +458,7 @@ class WanTrainer(BaseTrainer):
 
             if (
                 epoch % cfg.eval_freq == 0
-                and epoch > 0
+                and (epoch > 0 or cfg.initial_eval)
                 and not (resume_path and epoch == first_epoch)
             ):
                 wan_eval_once(

@@ -110,6 +110,7 @@ class Config:
     seed: int = 42
     num_epochs: int = 1
     eval_freq: int = 30
+    initial_eval: bool = False
     save_freq: int = 60
     num_checkpoint_limit: int = 1
     height: int = 240

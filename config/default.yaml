@@ -6,6 +6,7 @@ cudnn_deterministic: true
 cudnn_benchmark: false
 num_epochs: 100000
 eval_freq: 30
+initial_eval: false
 save_freq: 60
 num_checkpoint_limit: 2
 height: 240
