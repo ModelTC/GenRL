@@ -231,7 +231,17 @@ class BaseTrainer(ABC):
         self.accelerator = build_accelerator(
             self.cfg, gradient_accumulation_steps, accelerator_config
         )
+
+        # Global seeding
         set_seed(self.cfg.seed, device_specific=True)
+
+        # Global backend settings (configurable via Config)
+        # cuDNN determinism / benchmarking
+        torch.backends.cudnn.deterministic = self.cfg.cudnn_deterministic
+        torch.backends.cudnn.benchmark = self.cfg.cudnn_benchmark
+        # TF32 matmul on Tensor Cores
+        if hasattr(torch.backends.cuda, "matmul"):
+            torch.backends.cuda.matmul.allow_tf32 = self.cfg.allow_tf32
 
         if self.accelerator.is_main_process:
             self.accelerator.init_trackers(

@@ -123,6 +123,8 @@ class Config:
     trainer: str = "wan"
     use_lora: bool = True
     allow_tf32: bool = True
+    cudnn_deterministic: bool = True
+    cudnn_benchmark: bool = False
     per_prompt_stat_tracking: bool = True
     resume_from: Optional[str] = None
     sample: SampleConfig = field(default_factory=SampleConfig)

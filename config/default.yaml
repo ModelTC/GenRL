@@ -1,6 +1,9 @@
 run_name: debug_1
 project_name: VideoRL
 seed: 42
+allow_tf32: true
+cudnn_deterministic: true
+cudnn_benchmark: false
 num_epochs: 100000
 eval_freq: 30
 save_freq: 60
@@ -16,7 +19,6 @@ eval_reward_module: null
 prompt_fn: general_ocr
 trainer: wan
 use_lora: true
-allow_tf32: true
 per_prompt_stat_tracking: true
 paths:
   save_dir: logs/video_ocr
