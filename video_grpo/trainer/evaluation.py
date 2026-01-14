@@ -1,4 +1,5 @@
 """Evaluation utilities for trainers."""
+
 from collections import defaultdict
 from typing import Any, Callable, List, Optional
 import numpy as np

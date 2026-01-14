@@ -1,4 +1,5 @@
 """Diffusion step computation utilities for trainers."""
+
 from typing import Any, Dict, Optional, Tuple
 import torch
 from video_grpo.config import Config

@@ -1,4 +1,5 @@
 """Text embedding utilities for trainers."""
+
 from typing import Any, List
 import torch
 from video_grpo.diffusers_patch.wan_prompt_embedding import encode_prompt

@@ -54,7 +54,9 @@ class TrainConfig:
     full_finetune: bool = False
     lora_path: Optional[str] = None
     loss_reweighting: Optional[str] = None
-    weight_advantages: bool = False  # If True, weight advantages after computing them; if False, weight rewards before computing advantages
+    weight_advantages: bool = (
+        False  # If True, weight advantages after computing them; if False, weight rewards before computing advantages
+    )
     # LoRA hyperparams
     lora_r: int = 32
     lora_alpha: int = 64

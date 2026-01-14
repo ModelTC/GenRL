@@ -892,20 +892,23 @@ class WanTrainer(BaseTrainer):
             gathered_rewards=gathered_rewards,
             gathered_kl=gathered_kl,
             stat_tracker=self.stat_tracker if cfg.per_prompt_stat_tracking else None,
-            reward_stat_trackers=self.reward_stat_trackers
-            if cfg.train.weight_advantages and cfg.per_prompt_stat_tracking
-            else None,
-            kl_stat_tracker=self.kl_stat_tracker
-            if cfg.train.weight_advantages
-            and cfg.per_prompt_stat_tracking
-            and cfg.sample.kl_reward > 0
-            else None,
+            reward_stat_trackers=(
+                self.reward_stat_trackers
+                if cfg.train.weight_advantages and cfg.per_prompt_stat_tracking
+                else None
+            ),
+            kl_stat_tracker=(
+                self.kl_stat_tracker
+                if cfg.train.weight_advantages
+                and cfg.per_prompt_stat_tracking
+                and cfg.sample.kl_reward > 0
+                else None
+            ),
         )
 
         # Log advantage-related metrics
         if advantage_log_dict:
             self.log_metrics(accelerator, advantage_log_dict, global_step)
-
 
         advantages = torch.as_tensor(advantages)
         samples["advantages"] = advantages.reshape(

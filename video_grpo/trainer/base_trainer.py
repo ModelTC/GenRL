@@ -1,4 +1,5 @@
 """Base trainer class with common utilities for all trainers."""
+
 import os
 import datetime
 import json

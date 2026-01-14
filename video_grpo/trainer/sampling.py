@@ -1,4 +1,5 @@
 """Sampling utilities for trainers."""
+
 import time
 from typing import Any, Callable, Dict, List
 import torch
@@ -126,9 +127,11 @@ def wan_sample_epoch(
                     diffusion_clip=cfg.sample.diffusion_clip,
                     diffusion_clip_value=cfg.sample.diffusion_clip_value,
                     sde_window_size=cfg.sample.sde_window_size or 0,
-                    sde_window_range=tuple(cfg.sample.sde_window_range)
-                    if cfg.sample.sde_window_range
-                    else None,
+                    sde_window_range=(
+                        tuple(cfg.sample.sde_window_range)
+                        if cfg.sample.sde_window_range
+                        else None
+                    ),
                 )
 
             latents = torch.stack(latents, dim=1)

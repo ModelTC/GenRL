@@ -1,4 +1,5 @@
 """Advantage computation utilities for GRPO training."""
+
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 from accelerate import Accelerator
@@ -140,10 +141,10 @@ def compute_advantages(
             zero_std_ratios = {}
             for reward_name in cfg.reward_fn.keys():
                 raw_reward_key = f"{reward_name}_raw"
-                zero_std_ratios[
-                    f"zero_std_ratio_{reward_name}"
-                ] = calculate_zero_std_ratio(
-                    prompts, gathered_rewards, reward_key=f"ori_{raw_reward_key}"
+                zero_std_ratios[f"zero_std_ratio_{reward_name}"] = (
+                    calculate_zero_std_ratio(
+                        prompts, gathered_rewards, reward_key=f"ori_{raw_reward_key}"
+                    )
                 )
             log_dict = {
                 "group_size": group_size,

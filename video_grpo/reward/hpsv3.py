@@ -1,11 +1,47 @@
-import torch
-import numpy as np
-import tempfile
+import contextlib
 import os
-from typing import List, Union, Dict
+import sys
+import tempfile
+from pathlib import Path
+from typing import Dict, List, Union
+
+import numpy as np
+import torch
 from PIL import Image
-from hpsv3 import HPSv3RewardInferencer
 from loguru import logger
+
+# Prefer local HPSv3 submodule over site-packages.
+_HPSV3_ROOT = Path(__file__).resolve().parent / "HPSv3"
+if _HPSV3_ROOT.exists():
+    hpsv3_path = str(_HPSV3_ROOT)
+    if hpsv3_path not in sys.path:
+        sys.path.insert(0, hpsv3_path)
+
+from hpsv3 import HPSv3RewardInferencer
+
+
+def _preserve_accelerate_state():
+    """Context manager to preserve Accelerate global state during HPSv3 init."""
+    try:
+        from accelerate.state import AcceleratorState, PartialState
+    except Exception:
+        # If accelerate isn't available, no-op.
+        return contextlib.nullcontext()
+
+    class _StatePreserver:
+        def __enter__(self):
+            self._acc_state = dict(AcceleratorState._shared_state)
+            self._partial_state = dict(PartialState._shared_state)
+
+        def __exit__(self, exc_type, exc, tb):
+            AcceleratorState._shared_state.clear()
+            AcceleratorState._shared_state.update(self._acc_state)
+            PartialState._shared_state.clear()
+            PartialState._shared_state.update(self._partial_state)
+            return False
+
+    return _StatePreserver()
+
 
 from .utils import prepare_images
 from video_grpo.utils import fast_init
@@ -35,8 +71,10 @@ def _get_hpsv3_inferencer(device) -> HPSv3RewardInferencer:
     # Check if we already have an inferencer for this device
     if device_key not in _inferencer_cache:
         # Use fast_init to avoid slow CPU initializations
-        with fast_init(device_key, init_weights=False):
-            _inferencer_cache[device_key] = HPSv3RewardInferencer(device=device_key)
+        # Preserve Accelerate state in case HPSv3's TrainingArguments resets it.
+        with _preserve_accelerate_state():
+            with fast_init(device_key, init_weights=False):
+                _inferencer_cache[device_key] = HPSv3RewardInferencer(device=device_key)
 
     return _inferencer_cache[device_key]
 

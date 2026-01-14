@@ -52,8 +52,6 @@ def fast_init(device: torch.device, init_weights: bool = False):
         cls.__init__ = _ORIGINAL_INITS[cls]
 
 
-
-
 def build_accelerator(
     cfg: Any, grad_acc_steps: int, project_config: ProjectConfiguration
 ) -> Accelerator:
