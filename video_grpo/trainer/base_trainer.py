@@ -21,8 +21,6 @@ from video_grpo.utils import (
     resolve_resume_checkpoint,
     fast_init,
     unwrap_model,
-    get_device,
-    get_process_index,
 )
 
 
@@ -265,7 +263,7 @@ class BaseTrainer(ABC):
         Returns:
             Configured pipeline instance.
         """
-        with fast_init(get_device(self.accelerator), init_weights=False):
+        with fast_init(self.accelerator.device, init_weights=False):
             self.pipeline = pipeline_class.from_pretrained(pretrained_path)
         return self.pipeline
 
@@ -378,7 +376,7 @@ class BaseTrainer(ABC):
                 os.makedirs(ema_dir, exist_ok=True)
             accelerator.wait_for_everyone()
             ema_path = os.path.join(
-                ema_dir, f"ema_state_rank{get_process_index(accelerator)}.pt"
+                ema_dir, f"ema_state_rank{accelerator.process_index}.pt"
             )
             torch.save(self.ema.state_dict(), ema_path)
 
@@ -502,14 +500,14 @@ class BaseTrainer(ABC):
                 ema_state_path = os.path.join(
                     resume_path,
                     "ema",
-                    f"ema_state_rank{get_process_index(accelerator)}.pt",
+                    f"ema_state_rank{accelerator.process_index}.pt",
                 )
                 if os.path.exists(ema_state_path):
                     ema_state = torch.load(
-                        ema_state_path, map_location=get_device(accelerator)
+                        ema_state_path, map_location=accelerator.device
                     )
                     self.ema.load_state_dict(ema_state)
-                    self.ema.to(get_device(accelerator))
+                    self.ema.to(accelerator.device)
                 else:
                     raise ValueError(f"No EMA state found at {ema_state_path}")
 

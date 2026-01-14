@@ -10,7 +10,6 @@ from typing import Any, Callable, Dict, List
 import torch
 import tqdm
 from accelerate import Accelerator
-from accelerate.state import PartialState
 from accelerate.utils import set_seed
 from diffusers import WanPipeline
 from peft import LoraConfig, get_peft_model, PeftModel
@@ -31,9 +30,6 @@ from video_grpo.trainer.base_trainer import BaseTrainer
 from video_grpo.utils import (  # type: ignore
     unwrap_model,
     fast_init,
-    get_device,
-    get_num_processes,
-    get_process_index,
 )
 
 tqdm = partial(tqdm.tqdm, dynamic_ncols=True)
@@ -173,14 +169,13 @@ class WanTrainer(BaseTrainer):
         )
 
         # Setup mixed precision and move to device
-        device = get_device(accelerator)
         inference_dtype = self.setup_mixed_precision_dtype()
-        pipeline.vae.to(device, dtype=torch.float32)
-        pipeline.text_encoder.to(device, dtype=inference_dtype)
+        pipeline.vae.to(accelerator.device, dtype=torch.float32)
+        pipeline.text_encoder.to(accelerator.device, dtype=inference_dtype)
 
         # Setup LoRA if needed
         if cfg.use_lora:
-            pipeline.transformer.to(device)
+            pipeline.transformer.to(accelerator.device)
             transformer_lora_config = LoraConfig(
                 r=cfg.train.lora_r,
                 lora_alpha=cfg.train.lora_alpha,
@@ -233,7 +228,7 @@ class WanTrainer(BaseTrainer):
         """
         # Always return raw scores for logging and (optionally) advantage weighting.
         reward_fn = multi_score(
-            get_device(accelerator),
+            accelerator.device,
             cfg.reward_fn,
             cfg.reward_module,
             return_raw_scores=True,
@@ -249,7 +244,7 @@ class WanTrainer(BaseTrainer):
             else cfg.reward_module
         )
         eval_reward_fn = multi_score(
-            get_device(accelerator),
+            accelerator.device,
             eval_reward_cfg,
             eval_reward_module,
             return_raw_scores=True,
@@ -276,7 +271,7 @@ class WanTrainer(BaseTrainer):
             self.text_encoders,
             self.tokenizers,
             max_sequence_length=512,
-            device=get_device(accelerator),
+            device=accelerator.device,
         )
         sample_neg_prompt_embeds = neg_prompt_embed.repeat(cfg.sample.batch_size, 1, 1)
         train_neg_prompt_embeds = neg_prompt_embed.repeat(cfg.train.batch_size, 1, 1)
@@ -376,7 +371,7 @@ class WanTrainer(BaseTrainer):
                 transformer_params,
                 decay=cfg.train.ema_decay,
                 update_step_interval=cfg.train.ema_update_interval,
-                device=get_device(accelerator),
+                device=accelerator.device,
             )
         self.ema = ema
 
@@ -404,7 +399,7 @@ class WanTrainer(BaseTrainer):
                         f"Loading ref_transformer from pretrained_model: {cfg.paths.pretrained_model}"
                     )
                 # Reload ref_transformer from pretrained_model path
-                with fast_init(get_device(accelerator), init_weights=False):
+                with fast_init(accelerator.device, init_weights=False):
                     ref_pipeline = WanPipeline.from_pretrained(
                         cfg.paths.pretrained_model
                     )
@@ -430,12 +425,15 @@ class WanTrainer(BaseTrainer):
         """
         resume_path = self.resume_path
 
-        num_processes = get_num_processes(accelerator)
         samples_per_epoch = (
-            cfg.sample.batch_size * num_processes * cfg.sample.num_batches_per_epoch
+            cfg.sample.batch_size
+            * accelerator.num_processes
+            * cfg.sample.num_batches_per_epoch
         )
         total_train_batch_size = (
-            cfg.train.batch_size * num_processes * cfg.train.gradient_accumulation_steps
+            cfg.train.batch_size
+            * accelerator.num_processes
+            * cfg.train.gradient_accumulation_steps
         )
 
         if accelerator.is_main_process:
@@ -518,25 +516,23 @@ class WanTrainer(BaseTrainer):
             for inner_epoch in range(cfg.train.num_inner_epochs):
                 # Use deterministic generator for reproducibility
                 # Seed based on epoch and inner_epoch to ensure consistency across runs
-                generator = torch.Generator(device=get_device(accelerator))
+                generator = torch.Generator(device=accelerator.device)
                 generator.manual_seed(
                     cfg.seed + epoch * SEED_EPOCH_STRIDE + inner_epoch
                 )
                 perm = torch.randperm(
-                    total_batch_size,
-                    device=get_device(accelerator),
-                    generator=generator,
+                    total_batch_size, device=accelerator.device, generator=generator
                 )
                 samples = {k: v[perm] for k, v in samples.items()}
                 perms = torch.stack(
                     [
-                        torch.arange(num_timesteps, device=get_device(accelerator))
+                        torch.arange(num_timesteps, device=accelerator.device)
                         for _ in range(total_batch_size)
                     ]
                 )
                 for key in ["timesteps", "latents", "next_latents", "log_probs"]:
                     samples[key] = samples[key][
-                        torch.arange(total_batch_size, device=get_device(accelerator))[
+                        torch.arange(total_batch_size, device=accelerator.device)[
                             :, None
                         ],
                         perms,
@@ -910,14 +906,11 @@ class WanTrainer(BaseTrainer):
         if advantage_log_dict:
             self.log_metrics(accelerator, advantage_log_dict, global_step)
 
-        num_processes = get_num_processes(accelerator)
-        process_index = get_process_index(accelerator)
-        device = get_device(accelerator)
 
         advantages = torch.as_tensor(advantages)
         samples["advantages"] = advantages.reshape(
-            num_processes, -1, advantages.shape[-1]
-        )[process_index].to(device)
+            accelerator.num_processes, -1, advantages.shape[-1]
+        )[accelerator.process_index].to(accelerator.device)
         del samples["rewards"]
         del samples["prompt_ids"]
 
@@ -933,12 +926,10 @@ class WanTrainer(BaseTrainer):
             if len(false_indices) >= num_to_change:
                 # Use deterministic generator for reproducibility
                 # Seed based on epoch to ensure consistency across runs
-                generator = torch.Generator(device=get_device(accelerator))
+                generator = torch.Generator(device=accelerator.device)
                 generator.manual_seed(cfg.seed + epoch)
                 random_indices = torch.randperm(
-                    len(false_indices),
-                    device=get_device(accelerator),
-                    generator=generator,
+                    len(false_indices), device=accelerator.device, generator=generator
                 )[:num_to_change]
                 mask[false_indices[random_indices]] = True
         self.log_metrics(
