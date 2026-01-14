@@ -1,4 +1,3 @@
-import contextlib
 import os
 import sys
 import tempfile
@@ -16,35 +15,12 @@ if _videoalign_path not in sys.path:
     sys.path.insert(0, _videoalign_path)
 
 from inference import VideoVLMRewardInference
-from .utils import prepare_images
+from .utils import prepare_images, preserve_accelerate_state
 from video_grpo.utils import fast_init
 
 
 # Global cache for VideoAlign inferencer
 _inferencer_cache = {}
-
-
-def _preserve_accelerate_state():
-    """Context manager to preserve Accelerate global state during VideoAlign init."""
-    try:
-        from accelerate.state import AcceleratorState, PartialState
-    except Exception:
-        # If accelerate isn't available, no-op.
-        return contextlib.nullcontext()
-
-    class _StatePreserver:
-        def __enter__(self):
-            self._acc_state = dict(AcceleratorState._shared_state)
-            self._partial_state = dict(PartialState._shared_state)
-
-        def __exit__(self, exc_type, exc, tb):
-            AcceleratorState._shared_state.clear()
-            AcceleratorState._shared_state.update(self._acc_state)
-            PartialState._shared_state.clear()
-            PartialState._shared_state.update(self._partial_state)
-            return False
-
-    return _StatePreserver()
 
 
 def _get_inferencer(
@@ -81,7 +57,7 @@ def _get_inferencer(
 
         # Use fast_init to avoid slow CPU initializations
         # Preserve Accelerate state in case TrainingArguments resets it.
-        with _preserve_accelerate_state():
+        with preserve_accelerate_state():
             with fast_init(device_for_fast_init, init_weights=False):
                 _inferencer_cache[cache_key] = VideoVLMRewardInference(
                     load_from_pretrained=checkpoint_path,

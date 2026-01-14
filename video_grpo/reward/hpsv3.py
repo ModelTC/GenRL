@@ -25,6 +25,18 @@ from video_grpo.utils import fast_init
 _inferencer_cache: Dict[torch.device, HPSv3RewardInferencer] = {}
 
 
+def _extract_reward_scalar(reward) -> float:
+    if isinstance(reward, (list, tuple)) and len(reward) > 0:
+        return float(reward[0])
+    if isinstance(reward, torch.Tensor):
+        if reward.numel() == 0:
+            return 0.0
+        return reward.flatten()[0].item()
+    if hasattr(reward, "item"):
+        return reward.item()
+    return float(reward)
+
+
 def _get_hpsv3_inferencer(device) -> HPSv3RewardInferencer:
     """Get or create HPSv3 inferencer for the given device.
 
@@ -128,12 +140,7 @@ def hpsv3_general_score(device):
                 # Extract mu values (mean scores)
                 # HPSv3 returns a list where each element is [mu, sigma] or a tensor
                 for reward in frame_rewards_raw:
-                    if isinstance(reward, (list, tuple)) and len(reward) > 0:
-                        score = reward[0].item()  # Extract mu value (first element)
-                    elif hasattr(reward, "item"):
-                        score = reward.item()  # Direct tensor
-                    else:
-                        score = float(reward)  # Fallback: assume scalar
+                    score = _extract_reward_scalar(reward)
                     frame_rewards.append(score)
 
                 # Calculate mean score across all frames
@@ -212,12 +219,7 @@ def hpsv3_percentile_score(device):
                 # Extract mu values (mean scores)
                 # HPSv3 returns a list where each element is [mu, sigma] or a tensor
                 for reward in frame_rewards_raw:
-                    if isinstance(reward, (list, tuple)) and len(reward) > 0:
-                        score = reward[0].item()  # Extract mu value (first element)
-                    elif hasattr(reward, "item"):
-                        score = reward.item()  # Direct tensor
-                    else:
-                        score = float(reward)  # Fallback: assume scalar
+                    score = _extract_reward_scalar(reward)
                     frame_rewards.append(score)
 
                 # Calculate mean score of top 30% frames
