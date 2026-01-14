@@ -92,6 +92,9 @@ def sde_step_with_logprob(
                 generator=generator,
                 device=model_output.device,
                 dtype=model_output.dtype,
+                # NOTE: I do not pass generator=generator here.
+                # This is also reproducible, because I have set global seed in the trainer.
+                # Some local seeding would not impact the global seed, and thus the reproducibility.
             )
             prev_sample = (
                 prev_sample_mean + std_dev_t * torch.sqrt(-1 * dt) * variance_noise

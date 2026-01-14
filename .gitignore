@@ -99,6 +99,9 @@ wandb/
 *.feather
 *.nsys-rep
 
+# Allow datasets directory JSON files (tracked with git-lfs for large files)
+!datasets/**/*.json
+
 
 # Documents
 *.pdf
