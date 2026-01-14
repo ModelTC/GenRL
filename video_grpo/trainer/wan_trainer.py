@@ -474,6 +474,7 @@ class WanTrainer(BaseTrainer):
                     global_step,
                     self.ema,
                     self.transformer_params,
+                    log_metrics=self.log_metrics,
                 )
             # Per-epoch seeding for reproducible sampling (e.g., when generator=None / same_latent=False or calculate step-wise log_prob during sampling)
             set_seed(cfg.seed + epoch, device_specific=True)
@@ -741,7 +742,8 @@ class WanTrainer(BaseTrainer):
                             }
                             info = accelerator.reduce(info, reduction="mean")
                             info.update({"epoch": epoch, "inner_epoch": inner_epoch})
-                            accelerator.log(info, step=global_step)
+                            # Log to trackers and to stdout (scalar-only), with caller context
+                            self.log_metrics(accelerator, info, global_step)
                             global_step += 1
                             info = defaultdict(list)
                     if cfg.train.ema:
@@ -862,14 +864,15 @@ class WanTrainer(BaseTrainer):
         }
         kl_mean = samples["kl"].mean().detach().cpu().item()
         kl_abs = samples["kl"].abs().mean().detach().cpu().item()
-        accelerator.log(
+        self.log_metrics(
+            accelerator,
             {
                 "epoch": epoch,
                 **reward_logs,
                 "kl": kl_mean,
                 "kl_abs": kl_abs,
             },
-            step=global_step,
+            global_step,
         )
 
         # Compute advantages using the abstracted function
@@ -893,7 +896,7 @@ class WanTrainer(BaseTrainer):
 
         # Log advantage-related metrics
         if advantage_log_dict:
-            accelerator.log(advantage_log_dict, step=global_step)
+            self.log_metrics(accelerator, advantage_log_dict, global_step)
 
         advantages = torch.as_tensor(advantages)
         samples["advantages"] = advantages.reshape(
@@ -914,11 +917,12 @@ class WanTrainer(BaseTrainer):
             if len(false_indices) >= num_to_change:
                 random_indices = torch.randperm(len(false_indices))[:num_to_change]
                 mask[false_indices[random_indices]] = True
-        accelerator.log(
+        self.log_metrics(
+            accelerator,
             {
                 "actual_batch_size": mask.sum().item() // num_batches,
             },
-            step=global_step,
+            global_step,
         )
         samples = {k: v[mask] for k, v in samples.items()}
 

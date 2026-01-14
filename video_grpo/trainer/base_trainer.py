@@ -5,6 +5,7 @@ import json
 import re
 import shutil
 import warnings
+import inspect
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional, Tuple
 import torch
@@ -136,6 +137,95 @@ class BaseTrainer(ABC):
         self.resume_path = resolve_resume_checkpoint(
             getattr(self.cfg.paths, "resume_from", None)
         )
+
+    def log_metrics(
+        self,
+        accelerator: Accelerator,
+        metrics: dict[str, Any],
+        step: int,
+        prefix: Optional[str] = None,
+    ) -> None:
+        """Log metrics to trackers and (optionally) to stdout.
+
+        Args:
+            accelerator: The active :class:`Accelerator` instance.
+            metrics: Dictionary of metric name to value. All entries are forwarded
+                to ``accelerator.log``; only scalar-like values are printed.
+            step: Global step to use for logging.
+            prefix: Optional string prefix for the stdout log header. If ``None``,
+                a caller context of ``file:line function()`` is used instead.
+        """
+        # 1) Always log to the configured tracker(s)
+        accelerator.log(metrics, step=step)
+
+        # 2) Only main process prints to stdout
+        if not accelerator.is_main_process:
+            return
+
+        # Derive caller context (file, line, function) for easier debugging
+        caller_frame = inspect.currentframe()
+        if caller_frame is not None and caller_frame.f_back is not None:
+            caller = caller_frame.f_back
+            func_name = caller.f_code.co_name
+            line_no = caller.f_lineno
+            file_name = os.path.basename(caller.f_code.co_filename)
+            caller_ctx = f"{file_name}:{line_no} {func_name}()"
+        else:
+            caller_ctx = "<unknown>"
+
+        header = prefix if prefix is not None else caller_ctx
+
+        # Filter to scalar-like metrics only
+        scalar_items: dict[str, float] = {}
+        for key, value in metrics.items():
+            # Skip None values
+            if value is None:
+                continue
+            try:
+                # Handle torch.Tensor first (before numpy check, as Tensor also has .item() and .dtype)
+                if isinstance(value, torch.Tensor):
+                    # Only log 0-dim tensors as scalars
+                    if value.ndim == 0:
+                        # Ensure tensor is on CPU for .item() call
+                        if value.is_cuda:
+                            value = value.cpu()
+                        try:
+                            scalar_items[key] = float(value.item())
+                        except (ValueError, RuntimeError):
+                            # Skip if .item() fails
+                            continue
+                # Handle Python native types (int, float)
+                # Note: numpy.float64 is a subclass of float, but has dtype attribute
+                # numpy.int64 is NOT a subclass of int, and has dtype attribute
+                elif isinstance(value, (int, float)) and not hasattr(value, "dtype"):
+                    scalar_items[key] = float(value)
+                # Handle numpy scalars (numpy.int64, numpy.float64, etc.)
+                # numpy scalars have .item() method and .dtype attribute
+                elif hasattr(value, "item") and hasattr(value, "dtype"):
+                    try:
+                        scalar_items[key] = float(value.item())
+                    except (AttributeError, ValueError, TypeError):
+                        # Not a scalar numpy type, skip
+                        continue
+                # Skip non-scalar / non-numeric types (e.g., images, videos, dicts, lists)
+            except Exception:
+                # Skip any value that causes an exception during processing
+                continue
+
+        if not scalar_items:
+            return
+
+        # Build a compact "k=v" string
+        parts = []
+        for k, v in scalar_items.items():
+            # Use 4 decimal places for floats, plain for ints
+            if float(v).is_integer():
+                parts.append(f"{k}={int(v)}")
+            else:
+                parts.append(f"{k}={v:.4f}")
+
+        msg = " ".join(parts)
+        logger.info(f"[step {step}] {header} | {msg}")
 
     def setup_accelerator(self, gradient_accumulation_steps: int) -> Accelerator:
         """Setup Accelerate accelerator.

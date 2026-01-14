@@ -1,6 +1,6 @@
 """Evaluation utilities for trainers."""
 from collections import defaultdict
-from typing import Any, Callable, List
+from typing import Any, Callable, List, Optional
 import numpy as np
 import torch
 import tqdm
@@ -31,6 +31,9 @@ def wan_eval_once(
     global_step: int,
     ema: Any | None,
     transformer_params: List[torch.nn.Parameter] | None,
+    log_metrics: Optional[
+        Callable[[Accelerator, dict, int, Optional[str]], None]
+    ] = None,
 ):
     """Full eval loop aligned to original behavior: iterate all batches, log rewards/videos.
 
@@ -47,6 +50,8 @@ def wan_eval_once(
         global_step: Current global step for logging.
         ema: EMA module wrapper.
         transformer_params: List of transformer parameters.
+        log_metrics: Optional logging helper. If provided, used instead of
+            calling `accelerator.log` directly for scalar metrics.
 
     Returns:
         None. Logs metrics/videos to accelerator.
@@ -109,16 +114,17 @@ def wan_eval_once(
     if accelerator.is_main_process:
         # Only log raw scores (ending with '_raw')
         raw_keys = [k for k in all_rewards.keys() if k.endswith("_raw")]
-        accelerator.log(
-            {
-                **{
-                    f"eval_reward_{k}": np.mean(v)
-                    for k, v in all_rewards.items()
-                    if k in raw_keys
-                },
-            },
-            step=global_step,
-        )
+        metrics = {
+            f"eval_reward_{k}": float(np.mean(v))
+            for k, v in all_rewards.items()
+            if k in raw_keys
+        }
+        if log_metrics is not None:
+            # Use the shared logging helper (will also print to stdout)
+            log_metrics(accelerator, metrics, global_step, prefix="eval")
+        else:
+            accelerator.log(metrics, step=global_step)
+
         logger.info(f"Eval rewards: {all_rewards}")
         videos_eval, test_prompts, rewards_eval, _ = last_batch
         log_videos(
