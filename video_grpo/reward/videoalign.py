@@ -146,6 +146,7 @@ def videoalign_mq_score(device, checkpoint_path: str = None):
         device_for_tensor = torch.device(device)
     else:
         device_for_tensor = torch.device(str(device))
+    device_type = device_for_tensor.type
 
     dtype = torch.bfloat16  # VideoAlign typically uses bfloat16
     inferencer = _get_inferencer(checkpoint_path, device, dtype)
@@ -182,11 +183,12 @@ def videoalign_mq_score(device, checkpoint_path: str = None):
                 # Get reward using VideoAlign
                 # VideoAlign's reward method expects video_paths as list[str] and prompts as list[str]
                 with torch.no_grad():
-                    video_rewards = inferencer.reward(
-                        video_paths=[video_path],
-                        prompts=[prompts[i]],
-                        use_norm=True,
-                    )
+                    with torch.amp.autocast(device_type=device_type):
+                        video_rewards = inferencer.reward(
+                            video_paths=[video_path],
+                            prompts=[prompts[i]],
+                            use_norm=True,
+                        )
 
                 # Extract MQ score (Motion Quality)
                 mq_score = video_rewards[0]["MQ"]
@@ -238,6 +240,7 @@ def videoalign_ta_score(device, checkpoint_path: str = None):
         device_for_tensor = torch.device(device)
     else:
         device_for_tensor = torch.device(str(device))
+    device_type = device_for_tensor.type
 
     dtype = torch.bfloat16  # VideoAlign typically uses bfloat16
     inferencer = _get_inferencer(checkpoint_path, device, dtype)
@@ -272,11 +275,12 @@ def videoalign_ta_score(device, checkpoint_path: str = None):
                 # Get reward using VideoAlign
                 # VideoAlign's reward method expects video_paths as list[str] and prompts as list[str]
                 with torch.no_grad():
-                    video_rewards = inferencer.reward(
-                        video_paths=[video_path],
-                        prompts=[prompts[i]],
-                        use_norm=True,
-                    )
+                    with torch.amp.autocast(device_type=device_type):
+                        video_rewards = inferencer.reward(
+                            video_paths=[video_path],
+                            prompts=[prompts[i]],
+                            use_norm=True,
+                        )
 
                 # Extract TA score (Text-Video Alignment)
                 ta_score = video_rewards[0]["TA"]

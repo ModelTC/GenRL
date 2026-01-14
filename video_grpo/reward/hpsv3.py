@@ -92,6 +92,7 @@ def hpsv3_general_score(device):
         A function that takes (images, prompts, metadata, only_strict) and returns ({"avg": rewards}, {}).
     """
     inferencer = _get_hpsv3_inferencer(device)
+    device_type = torch.device(device).type if not isinstance(device, torch.device) else device.type
     general_prompt = "A high-quality image"
 
     def _fn(
@@ -133,9 +134,11 @@ def hpsv3_general_score(device):
                 # Evaluate all frames with the general prompt
                 # Repeat the general prompt for all frames
                 frame_prompts = [general_prompt] * len(frame_paths)
-                frame_rewards_raw = inferencer.reward(
-                    frame_prompts, image_paths=frame_paths
-                )
+                with torch.no_grad():
+                    with torch.amp.autocast(device_type=device_type):
+                        frame_rewards_raw = inferencer.reward(
+                            frame_prompts, image_paths=frame_paths
+                        )
 
                 # Extract mu values (mean scores)
                 # HPSv3 returns a list where each element is [mu, sigma] or a tensor
@@ -172,6 +175,7 @@ def hpsv3_percentile_score(device):
         A function that takes (images, prompts, metadata, only_strict) and returns ({"avg": rewards}, {}).
     """
     inferencer = _get_hpsv3_inferencer(device)
+    device_type = torch.device(device).type if not isinstance(device, torch.device) else device.type
 
     def _fn(
         images: Union[List[Image.Image], np.ndarray, torch.Tensor],
@@ -212,9 +216,11 @@ def hpsv3_percentile_score(device):
                 # Evaluate all frames with the video caption (prompt)
                 # Use the same prompt for all frames in the video
                 frame_prompts = [prompt] * len(frame_paths)
-                frame_rewards_raw = inferencer.reward(
-                    frame_prompts, image_paths=frame_paths
-                )
+                with torch.no_grad():
+                    with torch.amp.autocast(device_type=device_type):
+                        frame_rewards_raw = inferencer.reward(
+                            frame_prompts, image_paths=frame_paths
+                        )
 
                 # Extract mu values (mean scores)
                 # HPSv3 returns a list where each element is [mu, sigma] or a tensor
