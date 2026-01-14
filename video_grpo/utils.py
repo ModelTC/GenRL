@@ -4,6 +4,7 @@ import hashlib
 import contextlib
 import re
 import shutil
+import gc
 from typing import Any, Dict, List, Optional, Tuple, Type
 
 import imageio
@@ -117,6 +118,14 @@ def resolve_resume_checkpoint(resume_from: Optional[str]) -> Optional[str]:
         return None
     latest = sorted(checkpoints, key=lambda x: int(x.split("-")[-1]))[-1]
     return os.path.join(resume_from, latest)
+
+
+def cleanup_memory(accelerator: Optional[Accelerator] = None) -> None:
+    """Release Python and CUDA memory after heavy steps."""
+    gc.collect()
+    if torch.cuda.is_available():
+        if accelerator is None or accelerator.device.type == "cuda":
+            torch.cuda.empty_cache()
 
 
 def create_generator(

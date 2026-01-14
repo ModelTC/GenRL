@@ -30,6 +30,7 @@ from video_grpo.trainer.base_trainer import BaseTrainer
 from video_grpo.utils import (  # type: ignore
     unwrap_model,
     fast_init,
+    cleanup_memory,
 )
 
 tqdm = partial(tqdm.tqdm, dynamic_ncols=True)
@@ -476,6 +477,7 @@ class WanTrainer(BaseTrainer):
                     self.transformer_params,
                     log_metrics=self.log_metrics,
                 )
+                cleanup_memory(accelerator)
             # Per-epoch seeding for reproducible sampling (e.g., when generator=None / same_latent=False or calculate step-wise log_prob during sampling)
             set_seed(cfg.seed + epoch, device_specific=True)
             if (
@@ -492,6 +494,7 @@ class WanTrainer(BaseTrainer):
                     epoch,
                     current_epoch_tag,
                 )
+                cleanup_memory(accelerator)
 
             samples = wan_sample_epoch(
                 cfg,
