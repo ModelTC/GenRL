@@ -8,6 +8,7 @@ from functools import partial
 from typing import Any, Callable, Dict, List
 
 import torch
+import numpy as np
 import tqdm
 from accelerate import Accelerator
 from accelerate.utils import set_seed
@@ -882,8 +883,8 @@ class WanTrainer(BaseTrainer):
             for key, value in gathered_rewards.items()
             if key in raw_keys
         }
-        kl_mean = samples["kl"].mean().detach().cpu().item()
-        kl_abs = samples["kl"].abs().mean().detach().cpu().item()
+        kl_mean = float(gathered_kl.mean())
+        kl_abs = float(np.abs(gathered_kl).mean())
         self.log_metrics(
             accelerator,
             {
@@ -947,10 +948,16 @@ class WanTrainer(BaseTrainer):
                     len(false_indices), device=accelerator.device, generator=generator
                 )[:num_to_change]
                 mask[false_indices[random_indices]] = True
+        global_count = (
+            accelerator.gather(mask.sum()).sum().item()
+            if accelerator.num_processes > 1
+            else mask.sum().item()
+        )
+        actual_batch_size = global_count / (num_batches * accelerator.num_processes)
         self.log_metrics(
             accelerator,
             {
-                "actual_batch_size": mask.sum().item() // num_batches,
+                "actual_batch_size": actual_batch_size,
             },
             global_step,
         )
