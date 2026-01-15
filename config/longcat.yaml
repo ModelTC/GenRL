@@ -5,7 +5,7 @@ allow_tf32: true
 cudnn_deterministic: true
 cudnn_benchmark: false
 num_epochs: 100000
-eval_freq: 30
+eval_freq: 100
 initial_eval: true
 save_freq: 100
 num_checkpoint_limit: 3
