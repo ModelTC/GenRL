@@ -1,6 +1,9 @@
 import importlib
-import torch
 import inspect
+from contextlib import contextmanager
+
+import torch
+
 from video_grpo.reward import (
     video_ocr_score,
     hpsv3_general_score,
@@ -8,6 +11,9 @@ from video_grpo.reward import (
     videoalign_mq_score,
     videoalign_ta_score,
 )
+from video_grpo.reward.hpsv3 import set_hpsv3_device
+from video_grpo.reward.videoalign import set_videoalign_device
+from video_grpo.utils import cleanup_memory
 
 
 def load_reward_fn(name: str, device, module_path: str | None = None):
@@ -82,3 +88,47 @@ def multi_score(
         return scores, {}
 
     return _fn
+
+
+_GPU_REWARD_NAMES = {
+    "hpsv3_general",
+    "hpsv3_percentile",
+    "videoalign_mq",
+    "videoalign_ta",
+}
+
+
+def _has_reward(reward_cfg, names) -> bool:
+    if not reward_cfg:
+        return False
+    return any(name in reward_cfg for name in names)
+
+
+def _device_type(device) -> str:
+    if isinstance(device, torch.device):
+        return device.type
+    return torch.device(device).type
+
+
+def move_reward_models(reward_cfg, device) -> None:
+    """Move GPU-backed reward models to the given device."""
+    if _has_reward(reward_cfg, {"hpsv3_general", "hpsv3_percentile"}):
+        set_hpsv3_device(device)
+    if _has_reward(reward_cfg, {"videoalign_mq", "videoalign_ta"}):
+        set_videoalign_device(device)
+
+
+@contextmanager
+def reward_models_on_device(reward_cfg, device):
+    """Temporarily move reward models to device, then back to CPU."""
+    if _has_reward(reward_cfg, _GPU_REWARD_NAMES):
+        use_cuda = _device_type(device) == "cuda"
+        move_reward_models(reward_cfg, device)
+        try:
+            yield
+        finally:
+            move_reward_models(reward_cfg, "cpu")
+            if use_cuda:
+                cleanup_memory()
+    else:
+        yield

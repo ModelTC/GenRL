@@ -23,6 +23,21 @@ from video_grpo.utils import fast_init
 _inferencer_cache = {}
 
 
+def _normalize_device_str(device) -> str:
+    if isinstance(device, torch.device):
+        return str(device)
+    return str(device)
+
+
+def set_videoalign_device(device) -> None:
+    """Move cached VideoAlign inferencers to the given device."""
+    target = _normalize_device_str(device)
+    for inferencer in _inferencer_cache.values():
+        if inferencer.device != target:
+            inferencer.device = target
+            inferencer.model.to(target)
+
+
 def _get_inferencer(
     checkpoint_path: str, device, dtype: torch.dtype
 ) -> VideoVLMRewardInference:

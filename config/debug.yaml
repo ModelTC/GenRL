@@ -30,7 +30,7 @@ paths:
   pretrained_model: /data/models/Wan2.1-T2V-1.3B-Diffusers
   resume_from: null
 sample:
-  batch_size: 4
+  batch_size: 8
   eval_batch_size: 2
   num_batches_per_epoch: 1
   num_steps: 16
@@ -49,7 +49,7 @@ sample:
   diffusion_clip: true
   diffusion_clip_value: 0.45
 train:
-  batch_size: 4
+  batch_size: 8
   gradient_accumulation_steps: null  # auto: (num_batches_per_epoch * sample_time_per_prompt // 2) or 1
   num_inner_epochs: 1
   timestep_fraction: 0.99

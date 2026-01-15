@@ -25,6 +25,21 @@ from video_grpo.utils import fast_init
 _inferencer_cache: Dict[torch.device, HPSv3RewardInferencer] = {}
 
 
+def _normalize_device(device) -> torch.device:
+    if isinstance(device, torch.device):
+        return device
+    return torch.device(device)
+
+
+def set_hpsv3_device(device) -> None:
+    """Move cached HPSv3 inferencers to the given device."""
+    target = _normalize_device(device)
+    for inferencer in _inferencer_cache.values():
+        if inferencer.device != target:
+            inferencer.device = target
+            inferencer.model.to(target)
+
+
 def _extract_reward_scalar(reward) -> float:
     if isinstance(reward, (list, tuple)) and len(reward) > 0:
         return float(reward[0])

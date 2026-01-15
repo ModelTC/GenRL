@@ -20,7 +20,7 @@ from video_grpo.constants import ADVANTAGE_EPSILON, SEED_EPOCH_STRIDE
 from video_grpo.ema import EMAModuleWrapper
 from video_grpo.data import build_dataloaders
 from video_grpo.stat_tracking import PerPromptStatTracker
-from video_grpo.rewards import multi_score
+from video_grpo.rewards import multi_score, reward_models_on_device
 from video_grpo.advantages import compute_advantages
 from video_grpo.trainer.sampling import wan_sample_epoch
 from video_grpo.trainer.evaluation import wan_eval_once
@@ -229,7 +229,7 @@ class WanTrainer(BaseTrainer):
         """
         # Always return raw scores for logging and (optionally) advantage weighting.
         reward_fn = multi_score(
-            accelerator.device,
+            torch.device("cpu"),
             cfg.reward_fn,
             cfg.reward_module,
             return_raw_scores=True,
@@ -245,7 +245,7 @@ class WanTrainer(BaseTrainer):
             else cfg.reward_module
         )
         eval_reward_fn = multi_score(
-            accelerator.device,
+            torch.device("cpu"),
             eval_reward_cfg,
             eval_reward_module,
             return_raw_scores=True,
@@ -462,21 +462,27 @@ class WanTrainer(BaseTrainer):
                 and (epoch > 0 or cfg.initial_eval)
                 and not (resume_path and epoch == first_epoch)
             ):
-                wan_eval_once(
-                    cfg,
-                    accelerator,
-                    self.pipeline,
-                    self.test_dataloader,
-                    self.text_encoders,
-                    self.tokenizers,
-                    self.sample_neg_prompt_embeds,
-                    self.eval_reward_fn,
-                    self.autocast,
-                    global_step,
-                    self.ema,
-                    self.transformer_params,
-                    log_metrics=self.log_metrics,
+                eval_reward_cfg = (
+                    cfg.eval_reward_fn
+                    if cfg.eval_reward_fn is not None
+                    else cfg.reward_fn
                 )
+                with reward_models_on_device(eval_reward_cfg, accelerator.device):
+                    wan_eval_once(
+                        cfg,
+                        accelerator,
+                        self.pipeline,
+                        self.test_dataloader,
+                        self.text_encoders,
+                        self.tokenizers,
+                        self.sample_neg_prompt_embeds,
+                        self.eval_reward_fn,
+                        self.autocast,
+                        global_step,
+                        self.ema,
+                        self.transformer_params,
+                        log_metrics=self.log_metrics,
+                    )
                 cleanup_memory(accelerator)
             # Per-epoch seeding for reproducible sampling (e.g., when generator=None / same_latent=False or calculate step-wise log_prob during sampling)
             set_seed(cfg.seed + epoch, device_specific=True)
@@ -496,21 +502,22 @@ class WanTrainer(BaseTrainer):
                 )
                 cleanup_memory(accelerator)
 
-            samples = wan_sample_epoch(
-                cfg,
-                accelerator,
-                self.pipeline,
-                self.train_sampler,
-                self.train_iter,
-                self.reward_fn,
-                self.sample_neg_prompt_embeds,
-                self.text_encoders,
-                self.tokenizers,
-                self.executor,
-                self.autocast,
-                epoch,
-                global_step,
-            )
+            with reward_models_on_device(cfg.reward_fn, accelerator.device):
+                samples = wan_sample_epoch(
+                    cfg,
+                    accelerator,
+                    self.pipeline,
+                    self.train_sampler,
+                    self.train_iter,
+                    self.reward_fn,
+                    self.sample_neg_prompt_embeds,
+                    self.text_encoders,
+                    self.tokenizers,
+                    self.executor,
+                    self.autocast,
+                    epoch,
+                    global_step,
+                )
             # Prepare samples for training (collate, process rewards, compute advantages)
             samples = self._prepare_samples_for_training(samples, epoch, global_step)
 
