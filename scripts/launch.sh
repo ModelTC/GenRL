@@ -14,7 +14,7 @@ CONFIG_PATH=config/longcat.yaml
 NODE_RANK=${NODE_RANK:-0}
 RDZV_ID=${RDZV_ID:-5235}
 
-torchrun --nnodes=2 --nproc_per_node=8 \
+torchrun --nnodes=4 --nproc_per_node=8 \
   --rdzv_id=5235 \
   --rdzv_backend=c10d \
   --rdzv_endpoint=${MASTER_ADDR}:${MASTER_PORT} \
