@@ -130,7 +130,7 @@ def wan_eval_once(
         else:
             accelerator.log(metrics, step=global_step)
 
-        logger.info(f"Eval rewards: {all_rewards}")
+        # logger.info(f"Eval rewards: {all_rewards}")
         videos_eval, test_prompts, rewards_eval, _ = last_batch
         log_videos(
             "eval",
