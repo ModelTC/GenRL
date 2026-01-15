@@ -50,7 +50,7 @@ train:
   gradient_accumulation_steps: null  # auto: (num_batches_per_epoch * sample_time_per_prompt // 2) or 1
   num_inner_epochs: 1
   timestep_fraction: 0.99
-  beta: 0.004
+  beta: 3.0e-4
   learning_rate: 1.0e-4
   clip_range: 1.0e-3
   adv_clip_max: 5.0
