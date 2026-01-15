@@ -84,7 +84,7 @@ accelerate:
   distributed_type: FSDP
   mixed_precision: bf16
   num_processes: 8
-  num_machines: 4
+  num_machines: 2
   machine_rank: 0
   fsdp_config:
     auto_wrap_policy: transformer_based_wrap
