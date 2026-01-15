@@ -693,6 +693,8 @@ class WanTrainer(BaseTrainer):
                                     )
                                     / dt_sqrt
                                 )
+                                # Make scale a scalar to avoid non-scalar loss in backward.
+                                reweight_scale = torch.mean(reweight_scale)
                                 reweight_scale_kl = reweight_scale**2
 
                             if cfg.train.beta > 0:

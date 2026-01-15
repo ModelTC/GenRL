@@ -8,7 +8,7 @@ export HF_DATASETS_CACHE=/data/.cache/huggingface/datasets
 export XDG_CACHE_HOME=/data/.cache
 export TOKENIZERS_PARALLELISM=false
 export NCCL_TIMEOUT=18000
-CONFIG_PATH=config/longcat.yaml
+CONFIG_PATH=config/debug.yaml
 
 accelerate launch \
   train.py \

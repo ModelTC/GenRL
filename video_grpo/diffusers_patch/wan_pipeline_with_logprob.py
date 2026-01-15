@@ -77,9 +77,11 @@ def sde_step_with_logprob(
             * noise_level
         )
 
-        if diffusion_clip and std_dev_t * torch.sqrt(-1 * dt) > diffusion_clip_value:
-            # https://arxiv.org/pdf/2510.22200: trucated noise schedule for flow_sde
-            std_dev_t = diffusion_clip_value / torch.sqrt(-1 * dt)
+        if diffusion_clip:
+            # https://arxiv.org/pdf/2510.22200: truncated noise schedule for flow_sde
+            # std_dev_t and dt are tensors (batched); apply element-wise clipping.
+            max_std_dev_t = diffusion_clip_value / torch.sqrt(-1 * dt)
+            std_dev_t = torch.minimum(std_dev_t, max_std_dev_t)
 
         prev_sample_mean = (
             sample * (1 + std_dev_t**2 / (2 * sigma) * dt)
@@ -557,7 +559,12 @@ def wan_pipeline_with_logprob(
             1, self.vae.config.z_dim, 1, 1, 1
         ).to(latents.device, latents.dtype)
         latents = latents / latents_std + latents_mean
-        video = self.vae.decode(latents, return_dict=False)[0]
+        # Decode one sample at a time to reduce peak memory.
+        decoded_videos = []
+        for idx in range(latents.shape[0]):
+            decoded = self.vae.decode(latents[idx : idx + 1], return_dict=False)[0]
+            decoded_videos.append(decoded)
+        video = torch.cat(decoded_videos, dim=0)
         video = self.video_processor.postprocess_video(video, output_type=output_type)
     else:
         video = latents
