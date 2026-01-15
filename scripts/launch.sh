@@ -10,16 +10,14 @@ export TOKENIZERS_PARALLELISM=false
 export NCCL_TIMEOUT=18000
 CONFIG_PATH=config/longcat.yaml
 
-NUM_MACHINES=2
-MACHINE_RANK=${MACHINE_RANK:-0}
-MASTER_ADDR=${MASTER_ADDR:-"10.0.0.1"}
-MASTER_PORT=${MASTER_PORT:-29500}
 
-accelerate launch \
-  --num_machines ${NUM_MACHINES} \
-  --machine_rank ${MACHINE_RANK} \
-  --main_process_ip ${MASTER_ADDR} \
-  --main_process_port ${MASTER_PORT} \
+NODE_RANK=${NODE_RANK:-0}
+RDZV_ID=${RDZV_ID:-5235}
+
+torchrun --nnodes=2 --nproc_per_node=8 \
+  --rdzv_id=5235 \
+  --rdzv_backend=c10d \
+  --rdzv_endpoint=${MASTER_ADDR}:${MASTER_PORT} \
   train.py \
   --config "$CONFIG_PATH"
 
