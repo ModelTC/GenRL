@@ -6,7 +6,7 @@ cudnn_deterministic: true
 cudnn_benchmark: false
 num_epochs: 100000
 eval_freq: 30
-initial_eval: false
+initial_eval: true
 save_freq: 60
 num_checkpoint_limit: 2
 height: 240
@@ -24,7 +24,7 @@ per_prompt_stat_tracking: true
 paths:
   save_dir: logs/video_ocr
   dataset: datasets/ocr
-  pretrained_model: /data/models/Wan2.1-T2V-1.3B-Diffusers
+  pretrained_model: /data/DanceGRPO/data/Wan2.1-T2V-1.3B-Diffusers
   resume_from: null
 sample:
   batch_size: 8

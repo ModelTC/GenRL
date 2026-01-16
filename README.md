@@ -19,7 +19,7 @@
    mv VideoReward/* .
    mv VideoReward/.* . 2>/dev/null || true  # Move hidden files, ignore errors if none exist
    # Remove the empty VideoReward directory
-   rmdir VideoReward
+   rmd -rf VideoReward
    cd ../../../..  # Return to project root
    ```
 5. OCR extras (for `video_ocr` reward):
