@@ -24,14 +24,12 @@
    ```
 5. OCR extras (for `video_ocr` reward):
    ```bash
-   pip install paddlepaddle-gpu==2.6.2
-   pip install paddleocr==2.9.1
-   pip install python-Levenshtein
    # pre-download OCR model
-   python - <<'PY'
-   from paddleocr import PaddleOCR
-   ocr = PaddleOCR(use_angle_cls=False, lang="en", use_gpu=False, show_log=False)
-   PY
+   python -c "from paddleocr import PaddleOCR; ocr = PaddleOCR(use_angle_cls=False, lang='en', use_gpu=False, show_log=False)"
+   ```
+6. Setup HPSv3 requirements (required for `hpsv3_general` and `hpsv3_percentile` rewards):
+   ```bash
+   pip install flash-attn==2.7.4.post1 --no-build-isolation
    ```
 
 ## Run
