@@ -6,7 +6,7 @@
    ```bash
    pip install -r requirements.txt
    ```
-3. Initialize and update submodules (for `videoalign_mq` and `videoalign_ta` rewards):
+3. Initialize and update submodules (for `videoalign_mq` and `videoalign_ta` rewards, etc):
    ```bash
    git submodule update --init --recursive
    ```
