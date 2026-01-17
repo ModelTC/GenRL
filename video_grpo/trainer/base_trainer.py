@@ -2,6 +2,7 @@
 
 import os
 import datetime
+import time
 import json
 import re
 import shutil
@@ -126,8 +127,104 @@ class BaseTrainer(ABC):
             raise ConfigurationError(f"Configuration errors: {', '.join(errors)}")
 
     def _setup_paths(self):
-        """Setup run paths and directories."""
-        unique_id = datetime.datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
+        """Setup run paths and directories.
+
+        In distributed training, all processes must use the same timestamp to create
+        the same directory. This method ensures that:
+        1. Only the main process (LOCAL_RANK=0 or not in distributed mode) generates the timestamp
+        2. Other processes wait for and use the same timestamp via file-based synchronization
+        3. The timestamp is written to a lock file in the base save_dir directory
+        """
+        # Check if we're in distributed training by checking for RANK or LOCAL_RANK env var
+        # RANK is global rank across all machines (0 for main process in multi-machine training)
+        # LOCAL_RANK is local rank within a machine (0 for main process on each machine)
+        # Prefer RANK for multi-machine training, fallback to LOCAL_RANK for single-machine
+        rank = os.environ.get("RANK")
+        local_rank = os.environ.get("LOCAL_RANK")
+        # Main process is RANK=0 (global) or LOCAL_RANK=0 (single machine) or not in distributed mode
+        is_main_process = (rank is None and local_rank is None) or rank == "0" or (rank is None and local_rank == "0")
+
+        # Base save directory (before adding run_name)
+        base_save_dir = self.cfg.paths.save_dir
+
+        # Create a temporary lock file path for timestamp synchronization.
+        # Prefer a run-specific suffix when available to avoid stale reuse.
+        run_id = (
+            os.environ.get("TORCHELASTIC_RUN_ID")
+            or os.environ.get("RDZV_ID")
+            or os.environ.get("SLURM_JOB_ID")
+            or os.environ.get("LSB_JOBID")
+            or os.environ.get("PBS_JOBID")
+            or os.environ.get("JOB_ID")
+        )
+        lock_suffix = f".{run_id}" if run_id else ""
+        timestamp_lock_file = os.path.join(
+            base_save_dir, f".run_timestamp_lock{lock_suffix}"
+        )
+
+        if is_main_process:
+            # Main process generates the timestamp
+            unique_id = datetime.datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
+
+            # Ensure base directory exists
+            os.makedirs(base_save_dir, exist_ok=True)
+
+            # Write timestamp to lock file atomically
+            temp_file = timestamp_lock_file + ".tmp"
+            with open(temp_file, "w") as f:
+                f.write(unique_id)
+            os.rename(temp_file, timestamp_lock_file)  # Atomic rename on most filesystems
+        else:
+            # Non-main processes wait for and read the timestamp from lock file
+            max_wait = 60  # Wait up to 60 seconds for main process to create the file
+            max_stale_seconds = 300  # Ignore stale lock files from prior runs
+            wait_time = 0
+            while wait_time < max_wait:
+                if os.path.exists(timestamp_lock_file):
+                    try:
+                        age_seconds = time.time() - os.path.getmtime(timestamp_lock_file)
+                    except OSError:
+                        age_seconds = max_stale_seconds + 1
+                    if age_seconds <= max_stale_seconds:
+                        break
+                time.sleep(0.1)
+                wait_time += 0.1
+
+            if not os.path.exists(timestamp_lock_file):
+                raise RuntimeError(
+                    f"Timestamp lock file not created by main process after {max_wait}s. "
+                    f"Expected at: {timestamp_lock_file}. "
+                    "This may indicate a synchronization issue in distributed training."
+                )
+
+            # Double-check file is not stale before reading (defensive check)
+            try:
+                age_seconds = time.time() - os.path.getmtime(timestamp_lock_file)
+                if age_seconds > max_stale_seconds:
+                    raise RuntimeError(
+                        f"Timestamp lock file exists but is stale (age={age_seconds:.1f}s > "
+                        f"{max_stale_seconds}s). File: {timestamp_lock_file}"
+                    )
+            except OSError as e:
+                raise RuntimeError(
+                    f"Failed to check timestamp lock file age: {e}. "
+                    f"File: {timestamp_lock_file}"
+                ) from e
+
+            # Read timestamp from lock file
+            try:
+                with open(timestamp_lock_file, "r") as f:
+                    unique_id = f.read().strip()
+                if not unique_id:
+                    raise RuntimeError(
+                        f"Timestamp lock file is empty: {timestamp_lock_file}"
+                    )
+            except (OSError, IOError) as e:
+                raise RuntimeError(
+                    f"Failed to read timestamp from lock file: {e}. "
+                    f"File: {timestamp_lock_file}"
+                ) from e
+
         self.cfg.run_name = (
             self.cfg.run_name + "_" + unique_id if self.cfg.run_name else unique_id
         )
