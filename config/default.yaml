@@ -8,7 +8,7 @@ num_epochs: 100000
 eval_freq: 30
 initial_eval: true
 save_freq: 60
-num_checkpoint_limit: 2
+num_checkpoint_limit: 300
 height: 240
 width: 416
 frames: 33
