@@ -791,9 +791,12 @@ class WanTrainer(BaseTrainer):
         # Critical: save_pretrained may call model.state_dict() internally:
         # - For LoRA: PeftModel.save_pretrained -> get_peft_model_state_dict -> model.state_dict()
         # - For full finetune: PreTrainedModel.save_pretrained -> model.state_dict()
-        # Get state_dict on ALL processes first (ensures all participate in unshard if needed)
-        # Then pass it to save_pretrained to avoid calling model.state_dict() again
-        state_dict_to_save = base_transformer.state_dict()
+        #
+        # Use accelerator.get_state_dict to ensure all ranks participate in FSDP
+        # state dict collection while keeping the full state on rank0 only. This
+        # avoids deadlocks and reduces memory spikes on multi-node runs.
+        state_dict_to_save = accelerator.get_state_dict(self.transformer)
+        accelerator.wait_for_everyone()
 
         # Save model - use try-finally to ensure cleanup even if save fails
         try:

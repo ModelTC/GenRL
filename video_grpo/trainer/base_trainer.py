@@ -507,14 +507,12 @@ class BaseTrainer(ABC):
         # Critical: save_pretrained may call model.state_dict() internally:
         # - For LoRA: PeftModel.save_pretrained -> get_peft_model_state_dict -> model.state_dict()
         # - For full finetune: PreTrainedModel.save_pretrained -> model.state_dict()
-        # Even after unwrap, if there are nested FSDP modules, state_dict() may trigger unshard
-        # Solution: Get state_dict on ALL processes first (this ensures all processes participate in unshard if needed)
-        # Then pass it to save_pretrained to avoid calling model.state_dict() again
-        # This is safer than relying on unwrap to remove all FSDP wrappers
-        # Note: Even if unwrap removed top-level FSDP, nested FSDP modules may still exist.
-        # Calling state_dict() on all processes ensures all participate in unshard if needed.
-        # If unshard is triggered, it will synchronize all processes internally via all_gather
-        state_dict_to_save = base_transformer.state_dict()
+        #
+        # Use accelerator.get_state_dict to ensure all ranks participate in FSDP
+        # state dict collection while keeping the full state on rank0 only. This
+        # avoids deadlocks and reduces memory spikes on multi-node runs.
+        state_dict_to_save = accelerator.get_state_dict(transformer)
+        accelerator.wait_for_everyone()
 
         try:
             if accelerator.is_main_process:
