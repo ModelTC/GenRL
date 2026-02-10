@@ -144,7 +144,9 @@ The following video demonstrates the quality improvement achieved by GenRL train
 
 <div align="center">
 
-https://github.com/user-attachments/assets/074d4b77-67b9-475f-a0c4-beb1f5168890
+<video src="https://github.com/user-attachments/assets/074d4b77-67b9-475f-a0c4-beb1f5168890" controls loop autoplay muted style="max-width: 100%; height: auto;">
+  Your browser does not support the video tag.
+</video>
 
 </div>
 
