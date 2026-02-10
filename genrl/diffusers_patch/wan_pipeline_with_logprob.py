@@ -99,13 +99,16 @@ def sde_step_with_logprob(
                 # This is also reproducible, because I have set global seed in the trainer.
                 # Some local seeding would not impact the global seed, and thus the reproducibility.
             )
-            prev_sample = prev_sample_mean + std_dev_t * torch.sqrt(-1 * dt) * variance_noise
+            prev_sample = (
+                prev_sample_mean + std_dev_t * torch.sqrt(-1 * dt) * variance_noise
+            )
 
         if deterministic:
             prev_sample = sample + dt * model_output
 
         log_prob = (
-            -((prev_sample.detach() - prev_sample_mean) ** 2) / (2 * ((std_dev_t * torch.sqrt(-1 * dt)) ** 2))
+            -((prev_sample.detach() - prev_sample_mean) ** 2)
+            / (2 * ((std_dev_t * torch.sqrt(-1 * dt)) ** 2))
             - torch.log(std_dev_t * torch.sqrt(-1 * dt))
             - torch.log(torch.sqrt(2 * torch.as_tensor(math.pi)))
         )
@@ -114,9 +117,9 @@ def sde_step_with_logprob(
         std_dev_t = sigma_prev * math.sin(noise_level * math.pi / 2)  # sigma_t in paper
         pred_original_sample = sample - sigma * model_output  # predicted x_0 in paper
         noise_estimate = sample + model_output * (1 - sigma)  # predicted x_1 in paper
-        prev_sample_mean = pred_original_sample * (1 - sigma_prev) + noise_estimate * torch.sqrt(
-            sigma_prev**2 - std_dev_t**2
-        )
+        prev_sample_mean = pred_original_sample * (
+            1 - sigma_prev
+        ) + noise_estimate * torch.sqrt(sigma_prev**2 - std_dev_t**2)
 
         if prev_sample is None:
             variance_noise = randn_tensor(
@@ -128,14 +131,18 @@ def sde_step_with_logprob(
             prev_sample = prev_sample_mean + std_dev_t * variance_noise
 
         if deterministic:
-            prev_sample = pred_original_sample * (1 - sigma_prev) + noise_estimate * sigma_prev
+            prev_sample = (
+                pred_original_sample * (1 - sigma_prev) + noise_estimate * sigma_prev
+            )
 
         # remove all constants
         log_prob = -((prev_sample.detach() - prev_sample_mean) ** 2)
 
     else:
         msg = f"Unknown sde_type: {sde_type}. Must be 'flow_sde' or 'flow_cps'."
-        raise ValueError(msg)
+        raise ValueError(
+            msg
+        )
 
     # mean along all but batch dimension
     log_prob = log_prob.mean(dim=tuple(range(1, log_prob.ndim)))
@@ -205,7 +212,12 @@ def wan_pipeline_with_logprob(
     )
 
     if num_frames % self.vae_scale_factor_temporal != 1:
-        num_frames = num_frames // self.vae_scale_factor_temporal * self.vae_scale_factor_temporal + 1
+        num_frames = (
+            num_frames
+            // self.vae_scale_factor_temporal
+            * self.vae_scale_factor_temporal
+            + 1
+        )
     num_frames = max(num_frames, 1)
 
     self._guidance_scale = guidance_scale
@@ -265,18 +277,24 @@ def wan_pipeline_with_logprob(
                 f"sde_window_range span ({sde_window_range[1] - sde_window_range[0]}) "
                 f"must be >= sde_window_size ({sde_window_size})"
             )
-            raise ValueError(msg)
+            raise ValueError(
+                msg
+            )
         # Use generator if provided (for training reproducibility), otherwise fallback to random
         if generator is not None:
             # Extract generator from list if needed
             gen = generator[0] if isinstance(generator, list) and len(generator) > 0 else generator
             # Use torch.randint with generator for deterministic randomness
             max_start = sde_window_range[1] - sde_window_size
-            start = torch.randint(sde_window_range[0], max_start + 1, (1,), generator=gen, device=device).item()
+            start = torch.randint(
+                sde_window_range[0], max_start + 1, (1,), generator=gen, device=device
+            ).item()
         else:
             # Fallback to Python random (for eval, where generator may not be provided)
             # This is safe because eval uses deterministic=True and set_seed at the start
-            start = random.randint(sde_window_range[0], sde_window_range[1] - sde_window_size)
+            start = random.randint(
+                sde_window_range[0], sde_window_range[1] - sde_window_size
+            )
         end = start + sde_window_size
         sde_window = (start, end)
         # In window mode, initialize all_latents as empty list (will be populated in the loop)
@@ -383,7 +401,9 @@ def wan_pipeline_with_logprob(
 
                 latents = callback_outputs.pop("latents", latents)
                 prompt_embeds = callback_outputs.pop("prompt_embeds", prompt_embeds)
-                negative_prompt_embeds = callback_outputs.pop("negative_prompt_embeds", negative_prompt_embeds)
+                negative_prompt_embeds = callback_outputs.pop(
+                    "negative_prompt_embeds", negative_prompt_embeds
+                )
 
             # Compute KL reward
             if use_window:
@@ -392,7 +412,9 @@ def wan_pipeline_with_logprob(
                 if in_window:
                     if kl_reward > 0 and not deterministic:
                         latent_model_input = (
-                            torch.cat([latents_ori] * 2) if self.do_classifier_free_guidance else latents_ori
+                            torch.cat([latents_ori] * 2)
+                            if self.do_classifier_free_guidance
+                            else latents_ori
                         )
                         ref_model = getattr(self, "ref_transformer", None)
                         if ref_model is not None:
@@ -418,7 +440,9 @@ def wan_pipeline_with_logprob(
                         # perform guidance
                         if self.do_classifier_free_guidance:
                             noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                            noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_text - noise_pred_uncond)
+                            noise_pred = noise_pred_uncond + self.guidance_scale * (
+                                noise_pred_text - noise_pred_uncond
+                            )
 
                         (
                             _,
@@ -440,7 +464,9 @@ def wan_pipeline_with_logprob(
                             diffusion_clip_value=diffusion_clip_value,
                         )
                         assert std_dev_t == ref_std_dev_t
-                        kl = (prev_latents_mean - ref_prev_latents_mean) ** 2 / (2 * std_dev_t**2)
+                        kl = (prev_latents_mean - ref_prev_latents_mean) ** 2 / (
+                            2 * std_dev_t**2
+                        )
                         kl = kl.mean(dim=tuple(range(1, kl.ndim)))
                         all_kl.append(kl)
                     else:
@@ -448,7 +474,11 @@ def wan_pipeline_with_logprob(
                         all_kl.append(torch.zeros(len(latents), device=latents.device))
             # Original mode: compute KL for all timesteps (sde_window_size == 0)
             elif kl_reward > 0 and not deterministic:
-                latent_model_input = torch.cat([latents_ori] * 2) if self.do_classifier_free_guidance else latents_ori
+                latent_model_input = (
+                    torch.cat([latents_ori] * 2)
+                    if self.do_classifier_free_guidance
+                    else latents_ori
+                )
                 ref_model = getattr(self, "ref_transformer", None)
                 if ref_model is not None:
                     ref_ctx = contextlib.nullcontext()
@@ -473,7 +503,9 @@ def wan_pipeline_with_logprob(
                 # perform guidance
                 if self.do_classifier_free_guidance:
                     noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_text - noise_pred_uncond)
+                    noise_pred = noise_pred_uncond + self.guidance_scale * (
+                        noise_pred_text - noise_pred_uncond
+                    )
 
                 (
                     _,
@@ -495,7 +527,9 @@ def wan_pipeline_with_logprob(
                     diffusion_clip_value=diffusion_clip_value,
                 )
                 assert std_dev_t == ref_std_dev_t
-                kl = (prev_latents_mean - ref_prev_latents_mean) ** 2 / (2 * std_dev_t**2)
+                kl = (prev_latents_mean - ref_prev_latents_mean) ** 2 / (
+                    2 * std_dev_t**2
+                )
                 kl = kl.mean(dim=tuple(range(1, kl.ndim)))
                 all_kl.append(kl)
             else:
@@ -503,7 +537,9 @@ def wan_pipeline_with_logprob(
                 all_kl.append(torch.zeros(len(latents), device=latents.device))
 
             # call the callback, if provided
-            if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
+            if i == len(timesteps) - 1 or (
+                (i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0
+            ):
                 progress_bar.update()
 
     self._current_timestep = None
@@ -515,9 +551,9 @@ def wan_pipeline_with_logprob(
             .view(1, self.vae.config.z_dim, 1, 1, 1)
             .to(latents.device, latents.dtype)
         )
-        latents_std = 1.0 / torch.tensor(self.vae.config.latents_std).view(1, self.vae.config.z_dim, 1, 1, 1).to(
-            latents.device, latents.dtype
-        )
+        latents_std = 1.0 / torch.tensor(self.vae.config.latents_std).view(
+            1, self.vae.config.z_dim, 1, 1, 1
+        ).to(latents.device, latents.dtype)
         latents = latents / latents_std + latents_mean
         # Decode one sample at a time to reduce peak memory.
         decoded_videos = []

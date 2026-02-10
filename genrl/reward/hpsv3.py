@@ -145,7 +145,9 @@ def hpsv3_general_score(device):
                 # Repeat the general prompt for all frames
                 frame_prompts = [general_prompt] * len(frame_paths)
                 with torch.no_grad(), torch.amp.autocast(device_type=device_type):
-                    frame_rewards_raw = inferencer.reward(frame_prompts, image_paths=frame_paths)
+                    frame_rewards_raw = inferencer.reward(
+                        frame_prompts, image_paths=frame_paths
+                    )
 
                 # Extract mu values (mean scores)
                 # HPSv3 returns a list where each element is [mu, sigma] or a tensor
@@ -224,7 +226,9 @@ def hpsv3_percentile_score(device):
                 # Use the same prompt for all frames in the video
                 frame_prompts = [prompt] * len(frame_paths)
                 with torch.no_grad(), torch.amp.autocast(device_type=device_type):
-                    frame_rewards_raw = inferencer.reward(frame_prompts, image_paths=frame_paths)
+                    frame_rewards_raw = inferencer.reward(
+                        frame_prompts, image_paths=frame_paths
+                    )
 
                 # Extract mu values (mean scores)
                 # HPSv3 returns a list where each element is [mu, sigma] or a tensor
