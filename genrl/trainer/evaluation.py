@@ -9,12 +9,12 @@ from accelerate import Accelerator
 from accelerate.utils import set_seed
 from loguru import logger
 
-from video_grpo.config import Config
-from video_grpo.trainer.embeddings import wan_compute_text_embeddings
-from video_grpo.diffusers_patch.wan_pipeline_with_logprob import (
+from genrl.config import Config
+from genrl.trainer.embeddings import wan_compute_text_embeddings
+from genrl.diffusers_patch.wan_pipeline_with_logprob import (
     wan_pipeline_with_logprob,
 )
-from video_grpo.utils import log_videos
+from genrl.utils import log_videos
 
 tqdm = tqdm.tqdm
 

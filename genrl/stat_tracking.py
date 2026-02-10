@@ -2,7 +2,7 @@ import numpy as np
 from collections import defaultdict
 import torch
 
-from video_grpo.constants import EPSILON
+from genrl.constants import EPSILON
 
 
 class PerPromptStatTracker:

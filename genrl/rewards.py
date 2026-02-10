@@ -4,16 +4,16 @@ from contextlib import contextmanager
 
 import torch
 
-from video_grpo.reward import (
+from genrl.reward import (
     video_ocr_score,
     hpsv3_general_score,
     hpsv3_percentile_score,
     videoalign_mq_score,
     videoalign_ta_score,
 )
-from video_grpo.reward.hpsv3 import set_hpsv3_device
-from video_grpo.reward.videoalign import set_videoalign_device
-from video_grpo.utils import cleanup_memory
+from genrl.reward.hpsv3 import set_hpsv3_device
+from genrl.reward.videoalign import set_videoalign_device
+from genrl.utils import cleanup_memory
 
 
 def load_reward_fn(name: str, device, module_path: str | None = None):

@@ -45,12 +45,15 @@
 
 | Algorithm | Type | Status | Description |
 |-----------|------|--------|-------------|
-| **GRPO** | Policy Gradient | ✅ Supported | Group Relative Policy Optimization — compute advantages per-group with optional per-prompt stat tracking |
-| <!-- algo_2 --> | <!-- type --> | 🚧 Coming Soon | <!-- description --> |
-| <!-- algo_3 --> | <!-- type --> | 🚧 Coming Soon | <!-- description --> |
-| <!-- algo_4 --> | <!-- type --> | 📋 Planned | <!-- description --> |
+| **[FlowGRPO](https://arxiv.org/abs/2505.05470)** | Policy Gradient | ✅ Supported | Group Relative Policy Optimization — compute advantages per-group with optional per-prompt stat tracking |
+| **[MixGRPO](https://arxiv.org/abs/2507.21802)** | Policy Gradient | ✅ Supported | SDE sampling and GRPO-guided optimization only within the window  |
+| **[CPS](https://arxiv.org/abs/2509.05952)** | Policy Gradient | ✅ Supported | A novel sampling formulation that adheres to the Coefficient-Preserving property  |
+| **[LongCat-Video](https://arxiv.org/abs/2510.22200)** | Policy Gradient | ✅ Supported |  **Strong performance with multi-reward RLHF** |
+| **[DiffusionNFT](https://arxiv.org/abs/2509.16117)** | Reward-conditioned Fine-tuning | 🚧 Coming Soon | Online RL paradigm that optimizes diffusion models directly on the forward process via flow matching |
+| **[ReFL](https://arxiv.org/abs/2304.05977)** | Differentiable Reward Optimization | 🚧 Coming Soon | A direct tuning algorithm to optimize diffusion models against a scorer |
+| **[DiffusionDPO](https://arxiv.org/abs/2311.12908)** | DPO | 🚧 Coming Soon | Direct Preference Optimization (DPO), a simpler alternative to RLHF which directly optimizes a policy under a classification objective. |
 
-> 💡 *GenRL is designed to be algorithm-agnostic. Adding a new RL algorithm only requires implementing a new trainer — everything else (rewards, data, logging) is reusable.*
+> 💡 *GenRL is designed to be algorithm-agnostic. Adding a new RL algorithm only requires implementing a new trainer — everything else (rewards, data, logging) is reusable. For GRPO-based algorithms, most implementations only need to modify a small amount of code in the trainer.*
 
 ---
 
@@ -133,7 +136,7 @@ git submodule update --init --recursive
 <summary>🎬 VideoAlign (for <code>videoalign_mq</code> / <code>videoalign_ta</code> rewards)</summary>
 
 ```bash
-cd video_grpo/reward/VideoAlign/checkpoints
+cd genrl/reward/VideoAlign/checkpoints
 git lfs install
 git clone https://huggingface.co/KwaiVGI/VideoReward
 mv VideoReward/* .
@@ -182,7 +185,7 @@ GenRL/
 ├── 📁 config/                          # YAML configs
 │   ├── default.yaml                    #   Default (OCR, single-node)
 │   └── longcat.yaml                    #   Multi-reward, multi-node
-├── 📁 video_grpo/
+├── 📁 genrl/
 │   ├── config.py                       # Config schema & loader
 │   ├── constants.py                    # Global constants
 │   ├── data.py                         # Dataset & dataloaders

@@ -5,11 +5,11 @@ import numpy as np
 from accelerate import Accelerator
 from loguru import logger
 
-from video_grpo.config import Config
-from video_grpo.constants import EPSILON
-from video_grpo.exceptions import ConfigurationError
-from video_grpo.stat_tracking import PerPromptStatTracker
-from video_grpo.utils import calculate_zero_std_ratio
+from genrl.config import Config
+from genrl.constants import EPSILON
+from genrl.exceptions import ConfigurationError
+from genrl.stat_tracking import PerPromptStatTracker
+from genrl.utils import calculate_zero_std_ratio
 
 
 def _normalize_rewards(rewards: np.ndarray, epsilon: float = EPSILON) -> np.ndarray:

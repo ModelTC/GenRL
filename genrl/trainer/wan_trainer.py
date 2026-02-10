@@ -16,19 +16,19 @@ from diffusers import WanPipeline
 from peft import LoraConfig, get_peft_model, PeftModel
 from loguru import logger
 
-from video_grpo.config import Config
-from video_grpo.constants import ADVANTAGE_EPSILON, SEED_EPOCH_STRIDE
-from video_grpo.ema import EMAModuleWrapper
-from video_grpo.data import build_dataloaders
-from video_grpo.stat_tracking import PerPromptStatTracker
-from video_grpo.rewards import multi_score, reward_models_on_device
-from video_grpo.advantages import compute_advantages
-from video_grpo.trainer.sampling import wan_sample_epoch
-from video_grpo.trainer.evaluation import wan_eval_once
-from video_grpo.trainer.diffusion import wan_compute_log_prob
-from video_grpo.trainer.embeddings import wan_compute_text_embeddings
-from video_grpo.trainer.base_trainer import BaseTrainer
-from video_grpo.utils import (  # type: ignore
+from genrl.config import Config
+from genrl.constants import ADVANTAGE_EPSILON, SEED_EPOCH_STRIDE
+from genrl.ema import EMAModuleWrapper
+from genrl.data import build_dataloaders
+from genrl.stat_tracking import PerPromptStatTracker
+from genrl.rewards import multi_score, reward_models_on_device
+from genrl.advantages import compute_advantages
+from genrl.trainer.sampling import wan_sample_epoch
+from genrl.trainer.evaluation import wan_eval_once
+from genrl.trainer.diffusion import wan_compute_log_prob
+from genrl.trainer.embeddings import wan_compute_text_embeddings
+from genrl.trainer.base_trainer import BaseTrainer
+from genrl.utils import (  # type: ignore
     unwrap_model,
     fast_init,
     cleanup_memory,

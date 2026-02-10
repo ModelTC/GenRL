@@ -16,7 +16,7 @@ if _videoalign_path not in sys.path:
 
 from inference import VideoVLMRewardInference
 from .utils import prepare_images, preserve_accelerate_state
-from video_grpo.utils import fast_init
+from genrl.utils import fast_init
 
 
 # Global cache for VideoAlign inferencer
@@ -140,7 +140,7 @@ def videoalign_mq_score(device, checkpoint_path: str = None):
     Args:
         device: Device to run the model on (can be torch.device, str, or other device-like object).
         checkpoint_path: Path to VideoAlign checkpoint directory.
-                         Defaults to './video_grpo/reward/VideoAlign/checkpoints'.
+                         Defaults to './genrl/reward/VideoAlign/checkpoints'.
 
     Returns:
         A function that takes (images, prompts, metadata, only_strict) and returns ({"avg": rewards}, {}).
@@ -234,7 +234,7 @@ def videoalign_ta_score(device, checkpoint_path: str = None):
     Args:
         device: Device to run the model on (can be torch.device, str, or other device-like object).
         checkpoint_path: Path to VideoAlign checkpoint directory.
-                         Defaults to './video_grpo/reward/VideoAlign/checkpoints'.
+                         Defaults to './genrl/reward/VideoAlign/checkpoints'.
 
     Returns:
         A function that takes (images, prompts, metadata, only_strict) and returns ({"avg": rewards}, {}).

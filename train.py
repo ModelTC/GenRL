@@ -1,6 +1,6 @@
 import argparse
-from video_grpo.config import load_config
-from video_grpo.trainer import get_trainer  # type: ignore
+from genrl.config import load_config
+from genrl.trainer import get_trainer  # type: ignore
 
 
 def main():

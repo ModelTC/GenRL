@@ -2,8 +2,8 @@
 
 from typing import Any, Dict, Optional, Tuple
 import torch
-from video_grpo.config import Config
-from video_grpo.diffusers_patch.wan_pipeline_with_logprob import sde_step_with_logprob
+from genrl.config import Config
+from genrl.diffusers_patch.wan_pipeline_with_logprob import sde_step_with_logprob
 
 
 def wan_compute_log_prob(

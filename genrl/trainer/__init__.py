@@ -1,4 +1,4 @@
-from video_grpo.trainer.wan_trainer import WanTrainer
+from genrl.trainer.wan_trainer import WanTrainer
 
 
 def get_trainer(name: str = "wan"):

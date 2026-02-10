@@ -2,7 +2,7 @@
 
 from typing import Any, List
 import torch
-from video_grpo.diffusers_patch.wan_prompt_embedding import encode_prompt
+from genrl.diffusers_patch.wan_prompt_embedding import encode_prompt
 
 
 def wan_compute_text_embeddings(

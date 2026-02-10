@@ -19,7 +19,7 @@ if _HPSV3_ROOT.exists():
 from hpsv3 import HPSv3RewardInferencer
 
 from .utils import prepare_images, preserve_accelerate_state
-from video_grpo.utils import fast_init
+from genrl.utils import fast_init
 
 # Global cache for HPSv3 inferencers to avoid loading the same model multiple times
 _inferencer_cache: Dict[torch.device, HPSv3RewardInferencer] = {}

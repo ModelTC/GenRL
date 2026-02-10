@@ -16,9 +16,9 @@ from accelerate.utils import ProjectConfiguration, set_seed
 from loguru import logger
 from diffusers.utils.torch_utils import is_compiled_module
 
-from video_grpo.config import Config
-from video_grpo.exceptions import ConfigurationError
-from video_grpo.utils import (
+from genrl.config import Config
+from genrl.exceptions import ConfigurationError
+from genrl.utils import (
     build_accelerator,
     resolve_resume_checkpoint,
     fast_init,
