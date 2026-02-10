@@ -205,6 +205,72 @@ torchrun --nnodes=8 --nproc_per_node=8 \
   train.py --config config/longcat.yaml
 ```
 
+### 5️⃣ Inference
+
+Trained models (LoRA adapters or full-parameter checkpoints) can be directly used for inference (exemplified by Wan2.1-T2V-1.3B-Diffusers with LoRA training):
+
+**Using Diffusers Library** (PEFT-compatible):
+
+```python
+import torch
+from diffusers import AutoencoderKLWan, WanPipeline
+from diffusers.utils import export_to_video
+from peft import PeftModel
+
+# Available models: Wan-AI/Wan2.1-T2V-14B-Diffusers, Wan-AI/Wan2.1-T2V-1.3B-Diffusers
+model_id = "Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
+vae = AutoencoderKLWan.from_pretrained(model_id, subfolder="vae", torch_dtype=torch.float32)
+pipe = WanPipeline.from_pretrained(model_id, vae=vae, torch_dtype=torch.bfloat16)
+pipe.to("cuda")
+
+# Load LoRA adapter (if using LoRA training)
+pipe.transformer = PeftModel.from_pretrained(
+    pipe.transformer,
+    "path/to/final_model/transformer"  # Path to LoRA checkpoint after training
+)
+
+prompt = "A cat walks on the grass, realistic"
+negative_prompt = "Bright tones, overexposed, static, blurred details, worst quality, low quality"
+
+output = pipe(
+    prompt=prompt,
+    negative_prompt=negative_prompt,
+    height=480,
+    width=832,
+    num_frames=81,
+    guidance_scale=5.0
+).frames[0]
+export_to_video(output, "output.mp4", fps=15)
+```
+
+**Using LightX2V** (for accelerated inference):
+
+```python
+import torch
+from diffusers import AutoencoderKLWan, WanPipeline
+from peft import PeftModel
+
+# Load base model
+model_id = "Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
+vae = AutoencoderKLWan.from_pretrained(model_id, subfolder="vae", torch_dtype=torch.float32)
+pipe = WanPipeline.from_pretrained(model_id, vae=vae, torch_dtype=torch.bfloat16)
+
+# Load and merge LoRA adapter
+pipe.transformer = PeftModel.from_pretrained(
+    pipe.transformer,
+    "path/to/final_model/transformer"  # Path to LoRA checkpoint
+)
+pipe.transformer = pipe.transformer.merge_and_unload()  # Merge LoRA weights into base model
+
+# Save merged model (optional)
+merged_model_path = "path/to/merged_model"
+pipe.save_pretrained(merged_model_path)
+```
+
+After merging, you can directly use **LightX2V** for accelerated inference. See the [LightX2V inference script](https://github.com/ModelTC/LightX2V/blob/main/scripts/wan/run_wan_t2v.sh) for example usage.
+
+> 💡 **Note**: LoRA adapters saved by GenRL are fully compatible with the PEFT library, allowing seamless integration with standard diffusers workflows and third-party inference frameworks like LightX2V.
+
 ---
 
 ## 🏗️ Architecture

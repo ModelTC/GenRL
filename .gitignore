@@ -55,6 +55,7 @@ debug_tensor*/
 
 # Media and Visualization Files
 *.png
+!assets/*.png
 # *.jpg
 *.jpeg
 # *.gif
