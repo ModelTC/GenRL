@@ -1,6 +1,7 @@
 """Advantage computation utilities for GRPO training."""
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+
 import numpy as np
 from accelerate import Accelerator
 from loguru import logger
@@ -27,8 +28,8 @@ def _normalize_rewards(rewards: np.ndarray, epsilon: float = EPSILON) -> np.ndar
 
 def _compute_kl_advantages(
     gathered_kl: np.ndarray,
-    kl_stat_tracker: Optional[PerPromptStatTracker],
-    prompts: Optional[List[str]],
+    kl_stat_tracker: PerPromptStatTracker | None,
+    prompts: list[str] | None,
     use_per_prompt: bool,
 ) -> np.ndarray:
     """Compute KL advantages (negative because KL is a penalty).
@@ -45,23 +46,22 @@ def _compute_kl_advantages(
     if use_per_prompt and kl_stat_tracker is not None:
         # KL is a penalty (larger KL is worse), so use negative KL
         return kl_stat_tracker.update(prompts, -gathered_kl)
-    else:
-        # Direct normalization on full shape
-        # Normalize negative KL to maintain consistency with per_prompt mode
-        return _normalize_rewards(-gathered_kl)
+    # Direct normalization on full shape
+    # Normalize negative KL to maintain consistency with per_prompt mode
+    return _normalize_rewards(-gathered_kl)
 
 
 def compute_advantages(  # noqa: PLR0913, PLR0912, PLR0915
     cfg: Config,
     accelerator: Accelerator,
     pipeline: Any,  # Any pipeline with tokenizer.batch_decode method (e.g., diffusers.DiffusionPipeline)
-    samples: Dict[str, Any],
-    gathered_rewards: Dict[str, np.ndarray],
+    samples: dict[str, Any],
+    gathered_rewards: dict[str, np.ndarray],
     gathered_kl: np.ndarray,
-    stat_tracker: Optional[PerPromptStatTracker],
-    reward_stat_trackers: Optional[Dict[str, PerPromptStatTracker]],
-    kl_stat_tracker: Optional[PerPromptStatTracker],
-) -> Tuple[np.ndarray, Dict[str, Any]]:
+    stat_tracker: PerPromptStatTracker | None,
+    reward_stat_trackers: dict[str, PerPromptStatTracker] | None,
+    kl_stat_tracker: PerPromptStatTracker | None,
+) -> tuple[np.ndarray, dict[str, Any]]:
     """Compute advantages from gathered rewards and KL divergence.
 
     Supports two modes:
@@ -185,31 +185,29 @@ def compute_advantages(  # noqa: PLR0913, PLR0912, PLR0915
 
             # Sum weighted advantages
             advantages = sum(weighted_advantages_list)
-    else:
-        # Mode 1 (default): Weight rewards first, then compute advantages
-        if cfg.per_prompt_stat_tracking:
-            if stat_tracker is None:
-                raise ConfigurationError(
-                    "stat_tracker must be provided when per_prompt_stat_tracking=True"
-                )
-            prompt_ids = accelerator.gather(samples["prompt_ids"]).cpu().numpy()
-            prompts = pipeline.tokenizer.batch_decode(
-                prompt_ids, skip_special_tokens=True
+    # Mode 1 (default): Weight rewards first, then compute advantages
+    elif cfg.per_prompt_stat_tracking:
+        if stat_tracker is None:
+            msg = "stat_tracker must be provided when per_prompt_stat_tracking=True"
+            raise ConfigurationError(msg)
+        prompt_ids = accelerator.gather(samples["prompt_ids"]).cpu().numpy()
+        prompts = pipeline.tokenizer.batch_decode(
+            prompt_ids, skip_special_tokens=True
+        )
+        advantages = stat_tracker.update(prompts, gathered_rewards["avg"])
+        if accelerator.is_local_main_process:
+            logger.info(
+                f"len(prompts) {len(prompts)} | len unique {len(set(prompts))}"
             )
-            advantages = stat_tracker.update(prompts, gathered_rewards["avg"])
-            if accelerator.is_local_main_process:
-                logger.info(
-                    f"len(prompts) {len(prompts)} | len unique {len(set(prompts))}"
-                )
-            group_size, trained_prompt_num = stat_tracker.get_stats()
-            zero_std_ratio = calculate_zero_std_ratio(prompts, gathered_rewards)
-            log_dict = {
-                "group_size": group_size,
-                "trained_prompt_num": trained_prompt_num,
-                "zero_std_ratio": zero_std_ratio,
-            }
-            stat_tracker.clear()
-        else:
-            advantages = _normalize_rewards(gathered_rewards["avg"])
+        group_size, trained_prompt_num = stat_tracker.get_stats()
+        zero_std_ratio = calculate_zero_std_ratio(prompts, gathered_rewards)
+        log_dict = {
+            "group_size": group_size,
+            "trained_prompt_num": trained_prompt_num,
+            "zero_std_ratio": zero_std_ratio,
+        }
+        stat_tracker.clear()
+    else:
+        advantages = _normalize_rewards(gathered_rewards["avg"])
 
     return advantages, log_dict
