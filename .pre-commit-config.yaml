@@ -4,7 +4,7 @@ repos:
     rev: v0.11.0
     hooks:
       - id: ruff
-        args: [--fix, --respect-gitignore, --config=pyproject.toml]
+        args: [--fix, --respect-gitignore, --config=pyproject.toml, --ignore=UP038]
       - id: ruff-format
         args: [--config=pyproject.toml]
 
