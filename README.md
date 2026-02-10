@@ -88,27 +88,55 @@
 
 ## 📊 Performance
 
-<!-- TODO: Fill in actual numbers from your experiments -->
+### 📝 Video OCR Training Comparison
 
-### 🎬 Text-to-Video (Wan2.1-T2V 1.3B)
+<div align="center">
 
-| Method | HPSv3 ↑ | VideoAlign-MQ ↑ | VideoAlign-TA ↑ | Training Cost |
-|--------|---------|-----------------|-----------------|---------------|
-| Baseline (pretrained) | — | — | — | — |
-| GenRL-GRPO (LoRA) | — | — | — | — |
-| GenRL-GRPO (Full FT) | — | — | — | — |
+<table>
+  <tr>
+    <td align="center">
+      <img src="assets/flow_grpo.png" alt="FlowGRPO Original" width="100%">
+      <br><strong>FlowGRPO Original</strong>
+    </td>
+    <td align="center">
+      <img src="assets/genrl_flow_grpo.png" alt="GenRL FlowGRPO" width="100%">
+      <br><strong>GenRL FlowGRPO</strong>
+    </td>
+  </tr>
+</table>
 
-### 📝 Video OCR
+</div>
 
-| Method | OCR Accuracy ↑ | Levenshtein Score ↑ | Training Cost |
-|--------|---------------|---------------------|---------------|
-| Baseline (pretrained) | — | — | — |
-| GenRL-GRPO (LoRA) | — | — | — |
+**Performance Comparison**: Under the same settings (using `config/default.yaml` with **8 GPU training**), the original FlowGRPO repository reaches an OCR score of approximately **0.28** at around **3k steps**, while our GenRL implementation achieves an OCR score close to **0.3** at only **1.2k steps**, demonstrating superior training efficiency and convergence.
 
-<!-- ### 🖼️ Text-to-Image -->
-<!-- TODO: Add T2I benchmarks when available -->
+### 🎬 LongCat Multi-Reward Training
 
-> 📈 *Performance tables will be updated with results from ongoing experiments. Stay tuned!*
+<div align="center">
+
+<table>
+  <tr>
+    <td align="center" width="25%">
+      <img src="assets/genrl_longcat_hpsv3_general.png" alt="HPSv3 General" style="width: 100%; height: auto;">
+      <br><strong>HPSv3 General</strong>
+    </td>
+    <td align="center" width="25%">
+      <img src="assets/genrl_longcat_hpsv3_percentile.png" alt="HPSv3 Percentile" style="width: 100%; height: auto;">
+      <br><strong>HPSv3 Percentile</strong>
+    </td>
+    <td align="center" width="25%">
+      <img src="assets/genrl_longcat_mq.png" alt="VideoAlign-MQ" style="width: 100%; height: auto;">
+      <br><strong>VideoAlign-MQ</strong>
+    </td>
+    <td align="center" width="25%">
+      <img src="assets/genrl_longcat_ta.png" alt="VideoAlign-TA" style="width: 100%; height: auto;">
+      <br><strong>VideoAlign-TA</strong>
+    </td>
+  </tr>
+</table>
+
+</div>
+
+**LongCat Reproduction**: Our GenRL implementation successfully reproduces **LongCat** (not yet open-sourced) on the **Wan2.1-T2V 1.3B** model. Training with **64 H100 GPUs** up to **1.5k steps**, all four reward metrics continue to improve normally, demonstrating stable and effective multi-reward RLHF training.
 
 ---
 
