@@ -14,7 +14,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.6](https://img.shields.io/badge/pytorch-2.6-ee4c2c.svg)](https://pytorch.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-orange.svg)](LICENSE.txt)
 <!-- [![arXiv](https://img.shields.io/badge/arXiv-xxxx.xxxxx-b31b1b.svg)](https://arxiv.org/abs/xxxx.xxxxx) -->
 
 <!-- TODO: Add a teaser image / GIF here -->
@@ -317,7 +317,8 @@ logs/
 
 ## 📄 License
 
-<!-- TODO: Add license info -->
+GenRL is licensed under the **Apache License 2.0**.  
+See `LICENSE.txt` for the full license text.
 
 ---
 
