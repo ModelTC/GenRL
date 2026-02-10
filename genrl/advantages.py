@@ -51,7 +51,7 @@ def _compute_kl_advantages(
         return _normalize_rewards(-gathered_kl)
 
 
-def compute_advantages(
+def compute_advantages(  # noqa: PLR0913, PLR0912, PLR0915
     cfg: Config,
     accelerator: Accelerator,
     pipeline: Any,  # Any pipeline with tokenizer.batch_decode method (e.g., diffusers.DiffusionPipeline)
@@ -88,10 +88,11 @@ def compute_advantages(
         # Mode 2: Compute advantages for each reward separately, then weight them
         if cfg.per_prompt_stat_tracking:
             if reward_stat_trackers is None:
-                raise ConfigurationError(
+                msg = (
                     "reward_stat_trackers must be provided when weight_advantages=True "
                     "and per_prompt_stat_tracking=True"
                 )
+                raise ConfigurationError(msg)
             prompt_ids = accelerator.gather(samples["prompt_ids"]).cpu().numpy()
             prompts = pipeline.tokenizer.batch_decode(
                 prompt_ids, skip_special_tokens=True
@@ -100,7 +101,7 @@ def compute_advantages(
             # Compute advantages for each raw reward separately
             weighted_advantages_list = []
 
-            for reward_name in cfg.reward_fn.keys():
+            for reward_name in cfg.reward_fn:
                 raw_reward_key = f"{reward_name}_raw"
                 # Compute advantage for this reward using its own stat_tracker
                 reward_advantages = reward_stat_trackers[reward_name].update(
@@ -113,10 +114,11 @@ def compute_advantages(
             # Handle KL as a reward: compute advantage for KL, then subtract with kl_reward weight
             if cfg.sample.kl_reward > 0:
                 if kl_stat_tracker is None:
-                    raise ConfigurationError(
+                    msg = (
                         "kl_stat_tracker must be provided when weight_advantages=True, "
                         "per_prompt_stat_tracking=True, and kl_reward > 0"
                     )
+                    raise ConfigurationError(msg)
                 kl_advantages = _compute_kl_advantages(
                     gathered_kl, kl_stat_tracker, prompts, use_per_prompt=True
                 )
@@ -133,13 +135,13 @@ def compute_advantages(
                     f"len(prompts) {len(prompts)} | len unique {len(set(prompts))}"
                 )
             # Use the first stat_tracker for logging
-            first_reward_name = list(cfg.reward_fn.keys())[0]
+            first_reward_name = next(iter(cfg.reward_fn))
             group_size, trained_prompt_num = reward_stat_trackers[
                 first_reward_name
             ].get_stats()
             # Calculate zero_std_ratio for each raw reward
             zero_std_ratios = {}
-            for reward_name in cfg.reward_fn.keys():
+            for reward_name in cfg.reward_fn:
                 raw_reward_key = f"{reward_name}_raw"
                 zero_std_ratios[f"zero_std_ratio_{reward_name}"] = (
                     calculate_zero_std_ratio(
@@ -160,7 +162,7 @@ def compute_advantages(
         else:
             # No per-prompt tracking: compute advantages for each raw reward, then weight
             weighted_advantages_list = []
-            for reward_name in cfg.reward_fn.keys():
+            for reward_name in cfg.reward_fn:
                 raw_reward_key = f"{reward_name}_raw"
                 raw_rewards = gathered_rewards[
                     raw_reward_key
