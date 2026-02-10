@@ -6,7 +6,7 @@
       <img src="assets/logo.webp" alt="GenRL Logo" width="100">
     </td>
     <td style="padding-left: 12px; text-align: left;">
-      <h1 style="margin-bottom: 4px;"> <i>Gen</i>RL</h1>
+      <h1 style="margin-bottom: 4px;">GenRL</h1>
       <h3 style="margin-top: 0;">Reinforcement Learning Framework for Visual Generation</h3>
     </td>
   </tr>
