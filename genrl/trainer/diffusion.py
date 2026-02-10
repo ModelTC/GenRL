@@ -1,7 +1,9 @@
 """Diffusion step computation utilities for trainers."""
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
+
 import torch
+
 from genrl.config import Config
 from genrl.diffusers_patch.wan_pipeline_with_logprob import sde_step_with_logprob
 
@@ -9,13 +11,13 @@ from genrl.diffusers_patch.wan_pipeline_with_logprob import sde_step_with_logpro
 def wan_compute_log_prob(
     transformer: torch.nn.Module,
     pipeline: Any,  # Pipeline with scheduler
-    sample: Dict[str, torch.Tensor],
+    sample: dict[str, torch.Tensor],
     j: int,
     embeds: torch.Tensor,
-    negative_embeds: Optional[torch.Tensor],
+    negative_embeds: torch.Tensor | None,
     cfg: Config,
-    attention_kwargs: Optional[Dict[str, Any]] = None,
-) -> Tuple[
+    attention_kwargs: dict[str, Any] | None = None,
+) -> tuple[
     torch.Tensor,
     torch.Tensor,
     torch.Tensor,

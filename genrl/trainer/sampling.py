@@ -1,18 +1,19 @@
 """Sampling utilities for trainers."""
 
 import time
-from typing import Any, Callable, Dict, List
+from collections.abc import Callable
+from typing import Any
+
 import torch
 import tqdm
 from accelerate import Accelerator
-from loguru import logger
 
 from genrl.config import Config
 from genrl.constants import SEED_EPOCH_STRIDE
-from genrl.trainer.embeddings import wan_compute_text_embeddings
 from genrl.diffusers_patch.wan_pipeline_with_logprob import (
     wan_pipeline_with_logprob,
 )
+from genrl.trainer.embeddings import wan_compute_text_embeddings
 from genrl.utils import create_generator, log_videos
 
 tqdm = tqdm.tqdm
@@ -26,13 +27,13 @@ def wan_sample_epoch(
     train_iter,
     reward_fn: Callable,
     sample_neg_prompt_embeds: torch.Tensor,
-    text_encoders: List[Any],
-    tokenizers: List[Any],
+    text_encoders: list[Any],
+    tokenizers: list[Any],
     executor: Any,  # ThreadPoolExecutor
     autocast: Any,
     epoch: int,
     global_step: int,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Sampling epoch that returns gathered samples and logs train videos.
 
     Args:

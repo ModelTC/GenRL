@@ -1,4 +1,5 @@
 import argparse
+
 from genrl.config import load_config
 from genrl.trainer import get_trainer  # type: ignore
 

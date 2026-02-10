@@ -51,7 +51,7 @@ def _compute_kl_advantages(
     return _normalize_rewards(-gathered_kl)
 
 
-def compute_advantages(  # noqa: PLR0913, PLR0912, PLR0915
+def compute_advantages(
     cfg: Config,
     accelerator: Accelerator,
     pipeline: Any,  # Any pipeline with tokenizer.batch_decode method (e.g., diffusers.DiffusionPipeline)

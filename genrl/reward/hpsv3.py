@@ -2,12 +2,11 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Union
 
 import numpy as np
 import torch
-from PIL import Image
 from loguru import logger
+from PIL import Image
 
 # Prefer local HPSv3 submodule over site-packages.
 _HPSV3_ROOT = Path(__file__).resolve().parent / "HPSv3"
@@ -18,11 +17,12 @@ if _HPSV3_ROOT.exists():
 
 from hpsv3 import HPSv3RewardInferencer
 
-from .utils import prepare_images, preserve_accelerate_state
 from genrl.utils import fast_init
 
+from .utils import prepare_images, preserve_accelerate_state
+
 # Global cache for HPSv3 inferencers to avoid loading the same model multiple times
-_inferencer_cache: Dict[torch.device, HPSv3RewardInferencer] = {}
+_inferencer_cache: dict[torch.device, HPSv3RewardInferencer] = {}
 
 
 def _normalize_device(device) -> torch.device:
@@ -74,9 +74,8 @@ def _get_hpsv3_inferencer(device) -> HPSv3RewardInferencer:
     if device_key not in _inferencer_cache:
         # Use fast_init to avoid slow CPU initializations
         # Preserve Accelerate state in case HPSv3's TrainingArguments resets it.
-        with preserve_accelerate_state():
-            with fast_init(device_key, init_weights=False):
-                _inferencer_cache[device_key] = HPSv3RewardInferencer(device=device_key)
+        with preserve_accelerate_state(), fast_init(device_key, init_weights=False):
+            _inferencer_cache[device_key] = HPSv3RewardInferencer(device=device_key)
 
     return _inferencer_cache[device_key]
 
@@ -111,8 +110,8 @@ def hpsv3_general_score(device):
     general_prompt = "A high-quality image"
 
     def _fn(
-        images: Union[List[Image.Image], np.ndarray, torch.Tensor],
-        prompts: List[str],
+        images: list[Image.Image] | np.ndarray | torch.Tensor,
+        prompts: list[str],
         metadata=None,
         only_strict: bool = True,
     ):
@@ -122,12 +121,8 @@ def hpsv3_general_score(device):
 
         try:
             # Handle batch dimension
-            if is_video:
-                # images_np shape: (N, F, H, W, C)
-                batch_size = images_np.shape[0]
-            else:
-                # images_np shape: (N, H, W, C)
-                batch_size = images_np.shape[0]
+            # Both video (N, F, H, W, C) and image (N, H, W, C) have batch size as first dimension
+            batch_size = images_np.shape[0]
 
             for i in range(batch_size):
                 frame_rewards = []
@@ -149,11 +144,10 @@ def hpsv3_general_score(device):
                 # Evaluate all frames with the general prompt
                 # Repeat the general prompt for all frames
                 frame_prompts = [general_prompt] * len(frame_paths)
-                with torch.no_grad():
-                    with torch.amp.autocast(device_type=device_type):
-                        frame_rewards_raw = inferencer.reward(
-                            frame_prompts, image_paths=frame_paths
-                        )
+                with torch.no_grad(), torch.amp.autocast(device_type=device_type):
+                    frame_rewards_raw = inferencer.reward(
+                        frame_prompts, image_paths=frame_paths
+                    )
 
                 # Extract mu values (mean scores)
                 # HPSv3 returns a list where each element is [mu, sigma] or a tensor
@@ -193,8 +187,8 @@ def hpsv3_percentile_score(device):
     device_type = torch.device(device).type if not isinstance(device, torch.device) else device.type
 
     def _fn(
-        images: Union[List[Image.Image], np.ndarray, torch.Tensor],
-        prompts: List[str],
+        images: list[Image.Image] | np.ndarray | torch.Tensor,
+        prompts: list[str],
         metadata=None,
         only_strict: bool = True,
     ):
@@ -206,10 +200,10 @@ def hpsv3_percentile_score(device):
             # Handle batch dimension
             if is_video:
                 # images_np shape: (N, F, H, W, C)
-                batch_size = images_np.shape[0]
+                images_np.shape[0]
             else:
                 # images_np shape: (N, H, W, C)
-                batch_size = images_np.shape[0]
+                images_np.shape[0]
 
             for i, prompt in enumerate(prompts):
                 frame_rewards = []
@@ -231,11 +225,10 @@ def hpsv3_percentile_score(device):
                 # Evaluate all frames with the video caption (prompt)
                 # Use the same prompt for all frames in the video
                 frame_prompts = [prompt] * len(frame_paths)
-                with torch.no_grad():
-                    with torch.amp.autocast(device_type=device_type):
-                        frame_rewards_raw = inferencer.reward(
-                            frame_prompts, image_paths=frame_paths
-                        )
+                with torch.no_grad(), torch.amp.autocast(device_type=device_type):
+                    frame_rewards_raw = inferencer.reward(
+                        frame_prompts, image_paths=frame_paths
+                    )
 
                 # Extract mu values (mean scores)
                 # HPSv3 returns a list where each element is [mu, sigma] or a tensor

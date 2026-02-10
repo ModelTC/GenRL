@@ -13,7 +13,8 @@ def get_trainer(name: str = "wan"):
     name = name.lower()
     if name == "wan":
         return WanTrainer
-    raise ValueError(f"Unknown trainer: {name}")
+    msg = f"Unknown trainer: {name}"
+    raise ValueError(msg)
 
 
 __all__ = ["get_trainer"]

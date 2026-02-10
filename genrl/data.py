@@ -1,10 +1,9 @@
 import json
 import os
-from typing import Dict, List, Optional, Tuple, Union
 
 import torch
-from torch.utils.data import DataLoader, Dataset, Sampler
 from loguru import logger
+from torch.utils.data import DataLoader, Dataset, Sampler
 
 
 class TextPromptDataset(Dataset):
@@ -16,13 +15,13 @@ class TextPromptDataset(Dataset):
             split: File prefix (e.g., `train` or `test`).
         """
         self.file_path = os.path.join(dataset, f"{split}.txt")
-        with open(self.file_path, "r") as f:
+        with open(self.file_path) as f:
             self.prompts = [line.strip() for line in f.readlines()]
 
     def __len__(self) -> int:
         return len(self.prompts)
 
-    def __getitem__(self, idx: int | Tuple[int, int]) -> Dict:
+    def __getitem__(self, idx: int | tuple[int, int]) -> dict:
         """Return a prompt item, carrying sampler epoch_tag if provided."""
         epoch_tag = None
         if isinstance(idx, tuple):
@@ -30,7 +29,7 @@ class TextPromptDataset(Dataset):
         return {"epoch": epoch_tag, "prompt": self.prompts[idx], "metadata": {}}
 
     @staticmethod
-    def collate_fn(examples: List[Dict]) -> Tuple[Optional[int], List[str], List[Dict]]:
+    def collate_fn(examples: list[dict]) -> tuple[int | None, list[str], list[dict]]:
         """Batch prompts while preserving a consistent epoch tag."""
         epoch_tags = [example.get("epoch") for example in examples]
         epoch_tag = (
@@ -45,14 +44,14 @@ class GenevalPromptDataset(Dataset):
     def __init__(self, dataset: str, split: str = "train"):
         """Load Geneval prompts with metadata for the given split."""
         self.file_path = os.path.join(dataset, f"{split}_metadata.jsonl")
-        with open(self.file_path, "r", encoding="utf-8") as f:
+        with open(self.file_path, encoding="utf-8") as f:
             self.metadatas = [json.loads(line) for line in f]
             self.prompts = [item["prompt"] for item in self.metadatas]
 
     def __len__(self) -> int:
         return len(self.prompts)
 
-    def __getitem__(self, idx: int | Tuple[int, int]) -> Dict:
+    def __getitem__(self, idx: int | tuple[int, int]) -> dict:
         """Return a prompt+metadata, carrying sampler epoch_tag if provided."""
         epoch_tag = None
         if isinstance(idx, tuple):
@@ -64,7 +63,7 @@ class GenevalPromptDataset(Dataset):
         }
 
     @staticmethod
-    def collate_fn(examples: List[Dict]) -> Tuple[Optional[int], List[str], List[Dict]]:
+    def collate_fn(examples: list[dict]) -> tuple[int | None, list[str], list[dict]]:
         """Batch Geneval items while preserving epoch tags."""
         epoch_tags = [example.get("epoch") for example in examples]
         epoch_tag = (
@@ -155,9 +154,9 @@ class JsonPromptDataset(Dataset):
         """
         self._prompts = []
         self._metadatas = []
-        with open(self.file_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
+        with open(self.file_path, encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
                 if line:
                     try:
                         item = json.loads(line)
@@ -171,7 +170,7 @@ class JsonPromptDataset(Dataset):
                         logger.warning(f"Skipping invalid JSON line: {e}")
                         continue
 
-    def _get_item_lazy(self, idx: int) -> Dict:
+    def _get_item_lazy(self, idx: int) -> dict:
         """Lazy loading: read data for specified line from file.
 
         Args:
@@ -181,7 +180,8 @@ class JsonPromptDataset(Dataset):
             Dict containing "prompt" and "metadata" keys.
         """
         if idx >= len(self._line_offsets):
-            raise IndexError(f"Index {idx} out of range")
+            msg = f"Index {idx} out of range"
+            raise IndexError(msg)
 
         start_offset = self._line_offsets[idx]
         # Calculate end offset (start of next line or end of file)
@@ -191,7 +191,7 @@ class JsonPromptDataset(Dataset):
             else self._file_size
         )
 
-        with open(self.file_path, "r", encoding="utf-8") as f:
+        with open(self.file_path, encoding="utf-8") as f:
             f.seek(start_offset)
             line = f.read(end_offset - start_offset).strip()
             if line:
@@ -199,9 +199,11 @@ class JsonPromptDataset(Dataset):
                     item = json.loads(line)
                     prompt = item.get("prompt", "")
                     metadata = {k: v for k, v in item.items() if k != "prompt"}
-                    return {"prompt": prompt, "metadata": metadata}
                 except json.JSONDecodeError:
                     return {"prompt": "", "metadata": {}}
+                else:
+                    return {"prompt": prompt, "metadata": metadata}
+            return {"prompt": "", "metadata": {}}
         return {"prompt": "", "metadata": {}}
 
     def __len__(self) -> int:
@@ -217,7 +219,7 @@ class JsonPromptDataset(Dataset):
             return len(self._line_offsets)
         return len(self._prompts) if self._prompts else 0
 
-    def __getitem__(self, idx: Union[int, Tuple[int, int]]) -> Dict:
+    def __getitem__(self, idx: int | tuple[int, int]) -> dict:
         """Return a prompt item, carrying sampler epoch_tag if provided.
 
         Args:
@@ -245,7 +247,7 @@ class JsonPromptDataset(Dataset):
         }
 
     @staticmethod
-    def collate_fn(examples: List[Dict]) -> Tuple[Optional[int], List[str], List[Dict]]:
+    def collate_fn(examples: list[dict]) -> tuple[int | None, list[str], list[dict]]:
         """Batch prompts while preserving a consistent epoch tag.
 
         Args:
@@ -323,7 +325,7 @@ class DistributedKRepeatSampler(Sampler):
 
 def build_dataloaders(
     cfg, accelerator
-) -> Tuple[DataLoader, DataLoader, DistributedKRepeatSampler]:
+) -> tuple[DataLoader, DataLoader, DistributedKRepeatSampler]:
     """Construct train/eval dataloaders and sampler with epoch tags.
 
     Args:
@@ -347,8 +349,9 @@ def build_dataloaders(
         test_dataset = JsonPromptDataset(cfg.paths.dataset, "test")
         collate_fn = JsonPromptDataset.collate_fn
     else:
+        msg = "Only general_ocr, geneval, or filtered_prompts prompt_fn supported"
         raise NotImplementedError(
-            "Only general_ocr, geneval, or filtered_prompts prompt_fn supported"
+            msg
         )
 
     train_sampler = DistributedKRepeatSampler(

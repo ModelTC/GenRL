@@ -1,10 +1,9 @@
-import torch
+
 import numpy as np
-from typing import List, Union
-from PIL import Image
-from paddleocr import PaddleOCR
+import torch
 from Levenshtein import distance
-from loguru import logger
+from paddleocr import PaddleOCR
+from PIL import Image
 
 from .utils import prepare_images
 
@@ -19,8 +18,8 @@ def video_ocr_score():
     frame_interval = 4
 
     def _fn(
-        images: Union[List[Image.Image], np.ndarray],
-        prompts: List[str],
+        images: list[Image.Image] | np.ndarray,
+        prompts: list[str],
         metadata=None,
         only_strict: bool = True,
     ):
@@ -30,11 +29,8 @@ def video_ocr_score():
         images_np, _ = prepare_images(images)
 
         rewards = []
-        for img, prompt in zip(images_np, prompts_clean):
-            if img.ndim == 4:
-                frames = img[::frame_interval]
-            else:
-                frames = [img]
+        for img, prompt in zip(images_np, prompts_clean, strict=False):
+            frames = img[::frame_interval] if img.ndim == 4 else [img]
             frame_rewards = []
             for frame in frames:
                 try:

@@ -1,37 +1,36 @@
-import os
-import json
-import copy
 import contextlib
+import copy
+import os
 from collections import defaultdict
 from concurrent import futures
 from functools import partial
-from typing import Any, Callable, Dict, List
+from typing import Any
 
-import torch
 import numpy as np
+import torch
 import tqdm
 from accelerate import Accelerator
 from accelerate.utils import set_seed
 from diffusers import WanPipeline
-from peft import LoraConfig, get_peft_model, PeftModel
 from loguru import logger
+from peft import LoraConfig, PeftModel, get_peft_model
 
+from genrl.advantages import compute_advantages
 from genrl.config import Config
 from genrl.constants import ADVANTAGE_EPSILON, SEED_EPOCH_STRIDE
-from genrl.ema import EMAModuleWrapper
 from genrl.data import build_dataloaders
-from genrl.stat_tracking import PerPromptStatTracker
+from genrl.ema import EMAModuleWrapper
 from genrl.rewards import multi_score, reward_models_on_device
-from genrl.advantages import compute_advantages
-from genrl.trainer.sampling import wan_sample_epoch
-from genrl.trainer.evaluation import wan_eval_once
+from genrl.stat_tracking import PerPromptStatTracker
+from genrl.trainer.base_trainer import BaseTrainer
 from genrl.trainer.diffusion import wan_compute_log_prob
 from genrl.trainer.embeddings import wan_compute_text_embeddings
-from genrl.trainer.base_trainer import BaseTrainer
+from genrl.trainer.evaluation import wan_eval_once
+from genrl.trainer.sampling import wan_sample_epoch
 from genrl.utils import (  # type: ignore
-    unwrap_model,
-    fast_init,
     cleanup_memory,
+    fast_init,
+    unwrap_model,
 )
 
 tqdm = partial(tqdm.tqdm, dynamic_ncols=True)
@@ -87,7 +86,7 @@ class WanTrainer(BaseTrainer):
                 cfg.sample.num_steps * cfg.train.timestep_fraction
             )
         (
-            base_gas,
+            _base_gas,
             gradient_accumulation_steps,
         ) = self.calculate_gradient_accumulation_steps(num_train_timesteps)
         train_timesteps = self.get_train_timesteps(num_train_timesteps)
@@ -307,7 +306,7 @@ class WanTrainer(BaseTrainer):
                     use_global_std=cfg.sample.global_std,
                     max_group_std=cfg.sample.max_group_std,
                 )
-                for reward_name in cfg.reward_fn.keys()
+                for reward_name in cfg.reward_fn
             }
             self.reward_stat_trackers = reward_stat_trackers
             # Initialize KL stat tracker if KL reward is enabled
@@ -390,29 +389,28 @@ class WanTrainer(BaseTrainer):
 
         # Ensure ref_transformer exists after resume
         # Always reload from pretrained_model to ensure it uses original weights
-        if self.full_finetune and cfg.train.beta > 0:
-            if (
-                self.ref_transformer is None
-                or not hasattr(self.pipeline, "ref_transformer")
-                or self.pipeline.ref_transformer is None
-            ):
-                if accelerator.is_main_process:
-                    logger.info(
-                        f"Loading ref_transformer from pretrained_model: {cfg.paths.pretrained_model}"
-                    )
-                # Reload ref_transformer from pretrained_model path
-                with fast_init(accelerator.device, init_weights=False):
-                    ref_pipeline = WanPipeline.from_pretrained(
-                        cfg.paths.pretrained_model
-                    )
-                ref_transformer = ref_pipeline.transformer
-                ref_transformer.requires_grad_(False)
-                ref_transformer = accelerator.prepare_model(
-                    ref_transformer, evaluation_mode=True
+        if self.full_finetune and cfg.train.beta > 0 and (
+            self.ref_transformer is None
+            or not hasattr(self.pipeline, "ref_transformer")
+            or self.pipeline.ref_transformer is None
+        ):
+            if accelerator.is_main_process:
+                logger.info(
+                    f"Loading ref_transformer from pretrained_model: {cfg.paths.pretrained_model}"
                 )
-                ref_transformer.eval()
-                self.pipeline.ref_transformer = ref_transformer
-                self.ref_transformer = ref_transformer
+            # Reload ref_transformer from pretrained_model path
+            with fast_init(accelerator.device, init_weights=False):
+                ref_pipeline = WanPipeline.from_pretrained(
+                    cfg.paths.pretrained_model
+                )
+            ref_transformer = ref_pipeline.transformer
+            ref_transformer.requires_grad_(False)
+            ref_transformer = accelerator.prepare_model(
+                ref_transformer, evaluation_mode=True
+            )
+            ref_transformer.eval()
+            self.pipeline.ref_transformer = ref_transformer
+            self.ref_transformer = ref_transformer
 
     def _run_training_loop(
         self, cfg: Config, accelerator: Accelerator, first_epoch: int, global_step: int
@@ -448,7 +446,8 @@ class WanTrainer(BaseTrainer):
                         f"  Train batch size per device = {cfg.train.batch_size}",
                         f"  Gradient Accumulation steps = {cfg.train.gradient_accumulation_steps}",
                         f"  Total number of samples per epoch = {samples_per_epoch}",
-                        f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size}",
+                        f"  Total train batch size (w. parallel, distributed & accumulation) = "
+                        f"{total_train_batch_size}",
                         f"  Number of gradient updates per inner epoch = {samples_per_epoch // total_train_batch_size}",
                         f"  Number of inner epochs = {cfg.train.num_inner_epochs}",
                     ]
@@ -485,7 +484,8 @@ class WanTrainer(BaseTrainer):
                         log_metrics=self.log_metrics,
                     )
                 cleanup_memory(accelerator)
-            # Per-epoch seeding for reproducible sampling (e.g., when generator=None / same_latent=False or calculate step-wise log_prob during sampling)
+            # Per-epoch seeding for reproducible sampling
+            # (e.g., when generator=None / same_latent=False or calculate step-wise log_prob during sampling)
             set_seed(cfg.seed + epoch, device_specific=True)
             if (
                 epoch % cfg.save_freq == 0
@@ -555,13 +555,13 @@ class WanTrainer(BaseTrainer):
                     for k, v in samples.items()
                 }
                 samples_batched = [
-                    dict(zip(samples_batched, x))
-                    for x in zip(*samples_batched.values())
+                    dict(zip(samples_batched, x, strict=False))
+                    for x in zip(*samples_batched.values(), strict=False)
                 ]
 
                 self.pipeline.transformer.train()
                 info = defaultdict(list)
-                for i, sample in tqdm(
+                for _i, sample in tqdm(
                     list(enumerate(samples_batched)),
                     desc=f"Epoch {epoch}.{inner_epoch}: training",
                     position=0,
@@ -595,8 +595,9 @@ class WanTrainer(BaseTrainer):
                             if self.full_finetune:
                                 ref_model = self.ref_transformer
                                 if ref_model is None:
+                                    msg = "full_finetune with beta>0 requires a ref_transformer."
                                     raise ValueError(
-                                        "full_finetune with beta>0 requires a ref_transformer."
+                                        msg
                                     )
                                 ref_model.eval()
                                 with torch.no_grad():
@@ -622,13 +623,13 @@ class WanTrainer(BaseTrainer):
                                 with torch.no_grad():
                                     with self.transformer.module.disable_adapter():
                                         (
-                                            prev_sample_ref,
-                                            log_prob_ref,
+                                            _prev_sample_ref,
+                                            _log_prob_ref,
                                             prev_sample_mean_ref,
-                                            std_dev_t_ref,
+                                            _std_dev_t_ref,
                                             dt_sqrt_ref,
-                                            sigma_ref,
-                                            sigma_max_ref,
+                                            _sigma_ref,
+                                            _sigma_max_ref,
                                         ) = wan_compute_log_prob(
                                             self.transformer,
                                             self.pipeline,
@@ -644,7 +645,7 @@ class WanTrainer(BaseTrainer):
                         with accelerator.accumulate(self.transformer):
                             with self.autocast():
                                 (
-                                    prev_sample,
+                                    _prev_sample,
                                     log_prob,
                                     prev_sample_mean,
                                     std_dev_t,
@@ -711,8 +712,9 @@ class WanTrainer(BaseTrainer):
                                 elif cfg.sample.sde_type == "flow_cps":
                                     kl_denom = 1 / 2
                                 else:
+                                    msg = f"Unknown sde_type: {cfg.sample.sde_type}. Must be 'flow_sde' or 'flow_cps'."
                                     raise ValueError(
-                                        f"Unknown sde_type: {cfg.sample.sde_type}. Must be 'flow_sde' or 'flow_cps'."
+                                        msg
                                     )
                                 kl_loss = (
                                     (prev_sample_mean - prev_sample_mean_ref) ** 2
@@ -814,8 +816,8 @@ class WanTrainer(BaseTrainer):
             accelerator.wait_for_everyone()
 
     def _prepare_samples_for_training(
-        self, samples: List[Dict[str, Any]], epoch: int, global_step: int
-    ) -> Dict[str, torch.Tensor]:
+        self, samples: list[dict[str, Any]], epoch: int, global_step: int
+    ) -> dict[str, torch.Tensor]:
         """Prepare samples for training by collating, processing rewards, and computing advantages.
 
         Args:
@@ -839,7 +841,7 @@ class WanTrainer(BaseTrainer):
                     for sub_key in samples[0][k]
                 }
             )
-            for k in samples[0].keys()
+            for k in samples[0]
         }
 
         samples["rewards"]["ori_avg"] = samples["rewards"]["avg"]
@@ -851,7 +853,7 @@ class WanTrainer(BaseTrainer):
 
         # Save original raw rewards and broadcast them to (batch_size, num_timesteps)
         num_timesteps = samples["kl"].shape[1]
-        for reward_name in cfg.reward_fn.keys():
+        for reward_name in cfg.reward_fn:
             raw_reward_key = f"{reward_name}_raw"
             # Save original raw reward
             samples["rewards"][f"ori_{raw_reward_key}"] = samples["rewards"][
@@ -878,7 +880,7 @@ class WanTrainer(BaseTrainer):
         # log rewards and KL - only log raw scores
         raw_keys = [
             k
-            for k in gathered_rewards.keys()
+            for k in gathered_rewards
             if k.endswith("_raw") and not k.startswith("ori_")
         ]
         reward_logs = {

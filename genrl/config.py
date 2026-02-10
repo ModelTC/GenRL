@@ -1,7 +1,8 @@
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any
+
 import yaml
 
 
@@ -52,8 +53,8 @@ class TrainConfig:
     ema_update_interval: int = 8
     cfg: bool = True
     full_finetune: bool = False
-    lora_path: Optional[str] = None
-    loss_reweighting: Optional[str] = None
+    lora_path: str | None = None
+    loss_reweighting: str | None = None
     weight_advantages: bool = (
         False  # If True, weight advantages after computing them; if False, weight rewards before computing advantages
     )
@@ -82,16 +83,16 @@ class SampleConfig:
     num_steps: int = 20
     eval_num_steps: int = 50
     guidance_scale: float = 4.5
-    eval_guidance_scale: Optional[float] = None
+    eval_guidance_scale: float | None = None
     num_video_per_prompt: int = 4
     kl_reward: float = 0.0
     global_std: bool = False
     max_group_std: bool = False
     same_latent: bool = False
-    noise_level: Optional[float] = 0.7
-    sde_window_size: Optional[int] = None
-    sde_window_range: Optional[Any] = None
-    sde_type: Optional[str] = "flow_sde"  # 'flow_sde' or 'flow_cps'
+    noise_level: float | None = 0.7
+    sde_window_size: int | None = None
+    sde_window_range: Any | None = None
+    sde_type: str | None = "flow_sde"  # 'flow_sde' or 'flow_cps'
     diffusion_clip: bool = False
     diffusion_clip_value: float = 0.45
 
@@ -101,8 +102,8 @@ class ProjectPaths:
     save_dir: str = "logs/checkpoints"
     dataset: str = "dataset/ocr"
     pretrained_model: str = ""
-    resume_from: Optional[str] = None
-    accelerate_config: Optional[str] = None
+    resume_from: str | None = None
+    accelerate_config: str | None = None
 
 
 @dataclass
@@ -118,10 +119,10 @@ class Config:
     height: int = 240
     width: int = 416
     frames: int = 33
-    reward_fn: Dict[str, float] = field(default_factory=lambda: {"video_ocr": 1.0})
-    eval_reward_fn: Optional[Dict[str, float]] = None
-    reward_module: Optional[str] = None
-    eval_reward_module: Optional[str] = None
+    reward_fn: dict[str, float] = field(default_factory=lambda: {"video_ocr": 1.0})
+    eval_reward_fn: dict[str, float] | None = None
+    reward_module: str | None = None
+    eval_reward_module: str | None = None
     prompt_fn: str = "general_ocr"
     trainer: str = "wan"
     use_lora: bool = True
@@ -129,7 +130,7 @@ class Config:
     cudnn_deterministic: bool = True
     cudnn_benchmark: bool = False
     per_prompt_stat_tracking: bool = True
-    resume_from: Optional[str] = None
+    resume_from: str | None = None
     sample: SampleConfig = field(default_factory=SampleConfig)
     train: TrainConfig = field(default_factory=TrainConfig)
     paths: ProjectPaths = field(default_factory=ProjectPaths)
@@ -145,13 +146,10 @@ def load_config(path: str) -> Config:
     Returns:
         Parsed `Config` object with expanded user paths.
     """
-    with open(path, "r") as f:
-        if path.endswith((".yaml", ".yml")):
-            data = yaml.safe_load(f)
-        else:
-            data = json.load(f)
+    with open(path) as f:
+        data = yaml.safe_load(f) if path.endswith((".yaml", ".yml")) else json.load(f)
 
-    def build_dataclass(cls, src: Dict[str, Any]):
+    def build_dataclass(cls, src: dict[str, Any]):
         """Recursively construct nested dataclasses from plain dicts."""
         kwargs = {}
         for field_name, field_def in cls.__dataclass_fields__.items():  # type: ignore

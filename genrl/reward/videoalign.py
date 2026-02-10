@@ -1,13 +1,12 @@
 import os
 import sys
 import tempfile
-from typing import List, Union
 
+import imageio
 import numpy as np
 import torch
-from PIL import Image
-import imageio
 from loguru import logger
+from PIL import Image
 
 # Add VideoAlign to path for importing
 _videoalign_path = os.path.join(os.path.dirname(__file__), "VideoAlign")
@@ -15,9 +14,10 @@ if _videoalign_path not in sys.path:
     sys.path.insert(0, _videoalign_path)
 
 from inference import VideoVLMRewardInference
-from .utils import prepare_images, preserve_accelerate_state
+
 from genrl.utils import fast_init
 
+from .utils import prepare_images, preserve_accelerate_state
 
 # Global cache for VideoAlign inferencer
 _inferencer_cache = {}
@@ -72,13 +72,12 @@ def _get_inferencer(
 
         # Use fast_init to avoid slow CPU initializations
         # Preserve Accelerate state in case TrainingArguments resets it.
-        with preserve_accelerate_state():
-            with fast_init(device_for_fast_init, init_weights=False):
-                _inferencer_cache[cache_key] = VideoVLMRewardInference(
-                    load_from_pretrained=checkpoint_path,
-                    device=device_str,
-                    dtype=dtype,
-                )
+        with preserve_accelerate_state(), fast_init(device_for_fast_init, init_weights=False):
+            _inferencer_cache[cache_key] = VideoVLMRewardInference(
+                load_from_pretrained=checkpoint_path,
+                device=device_str,
+                dtype=dtype,
+            )
     return _inferencer_cache[cache_key]
 
 
@@ -95,18 +94,16 @@ def _convert_to_grayscale(images: np.ndarray) -> np.ndarray:
         # Convert RGB to grayscale using standard weights: 0.299*R + 0.587*G + 0.114*B
         gray = np.dot(images[..., :3], [0.299, 0.587, 0.114]).astype(np.uint8)
         # Expand to 3 channels: (N, H, W) -> (N, H, W, 3)
-        gray = np.stack([gray, gray, gray], axis=-1)
-        return gray
-    elif images.ndim == 5:  # NFHWC (videos)
+        return np.stack([gray, gray, gray], axis=-1)
+    if images.ndim == 5:  # NFHWC (videos)
         # Convert RGB to grayscale: (N, F, H, W, C) -> (N, F, H, W)
         gray = np.dot(images[..., :3], [0.299, 0.587, 0.114]).astype(np.uint8)
         # Expand to 3 channels: (N, F, H, W) -> (N, F, H, W, 3)
-        gray = np.stack([gray, gray, gray], axis=-1)
-        return gray
-    else:
-        raise ValueError(
-            f"Unsupported array shape for grayscale conversion: {images.shape}"
-        )
+        return np.stack([gray, gray, gray], axis=-1)
+    msg = f"Unsupported array shape for grayscale conversion: {images.shape}"
+    raise ValueError(
+        msg
+    )
 
 
 def _save_video_to_temp(frames: np.ndarray, fps: float = 8.0) -> str:
@@ -132,7 +129,7 @@ def _save_video_to_temp(frames: np.ndarray, fps: float = 8.0) -> str:
     return temp_file.name
 
 
-def videoalign_mq_score(device, checkpoint_path: str = None):
+def videoalign_mq_score(device, checkpoint_path: str | None = None):
     """
     VideoAlign-based reward for Motion Quality assessment.
     Uses grayscale videos to focus on motion characteristics rather than color.
@@ -167,8 +164,8 @@ def videoalign_mq_score(device, checkpoint_path: str = None):
     inferencer = _get_inferencer(checkpoint_path, device, dtype)
 
     def _fn(
-        images: Union[List[Image.Image], np.ndarray, torch.Tensor],
-        prompts: List[str],
+        images: list[Image.Image] | np.ndarray | torch.Tensor,
+        prompts: list[str],
         metadata=None,
         only_strict: bool = True,
     ):
@@ -197,13 +194,12 @@ def videoalign_mq_score(device, checkpoint_path: str = None):
 
                 # Get reward using VideoAlign
                 # VideoAlign's reward method expects video_paths as list[str] and prompts as list[str]
-                with torch.no_grad():
-                    with torch.amp.autocast(device_type=device_type):
-                        video_rewards = inferencer.reward(
-                            video_paths=[video_path],
-                            prompts=[prompts[i]],
-                            use_norm=True,
-                        )
+                with torch.no_grad(), torch.amp.autocast(device_type=device_type):
+                    video_rewards = inferencer.reward(
+                        video_paths=[video_path],
+                        prompts=[prompts[i]],
+                        use_norm=True,
+                    )
 
                 # Extract MQ score (Motion Quality)
                 mq_score = video_rewards[0]["MQ"]
@@ -226,7 +222,7 @@ def videoalign_mq_score(device, checkpoint_path: str = None):
     return _fn
 
 
-def videoalign_ta_score(device, checkpoint_path: str = None):
+def videoalign_ta_score(device, checkpoint_path: str | None = None):
     """
     VideoAlign-based reward for Text-Video Alignment assessment.
     Uses original color videos to preserve semantic correspondence assessment.
@@ -261,8 +257,8 @@ def videoalign_ta_score(device, checkpoint_path: str = None):
     inferencer = _get_inferencer(checkpoint_path, device, dtype)
 
     def _fn(
-        images: Union[List[Image.Image], np.ndarray, torch.Tensor],
-        prompts: List[str],
+        images: list[Image.Image] | np.ndarray | torch.Tensor,
+        prompts: list[str],
         metadata=None,
         only_strict: bool = True,
     ):
@@ -289,13 +285,12 @@ def videoalign_ta_score(device, checkpoint_path: str = None):
 
                 # Get reward using VideoAlign
                 # VideoAlign's reward method expects video_paths as list[str] and prompts as list[str]
-                with torch.no_grad():
-                    with torch.amp.autocast(device_type=device_type):
-                        video_rewards = inferencer.reward(
-                            video_paths=[video_path],
-                            prompts=[prompts[i]],
-                            use_norm=True,
-                        )
+                with torch.no_grad(), torch.amp.autocast(device_type=device_type):
+                    video_rewards = inferencer.reward(
+                        video_paths=[video_path],
+                        prompts=[prompts[i]],
+                        use_norm=True,
+                    )
 
                 # Extract TA score (Text-Video Alignment)
                 ta_score = video_rewards[0]["TA"]

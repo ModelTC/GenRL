@@ -4,7 +4,28 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "DTZ", "T10", "EM", "ISC", "ICN", "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SIM", "ARG", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "NPY", "RUF"]
-ignore = []
+ignore = [
+    "PTH",  # Prefer pathlib over os.path (too many changes needed)
+    "PLR0913",  # Too many arguments (acceptable for complex functions)
+    "PLR0912",  # Too many branches (acceptable for complex logic)
+    "PLR0915",  # Too many statements (acceptable for training loops)
+    "PLR2004",  # Magic value used in comparison (common in ML code)
+    "PGH003",  # Use specific rule codes when ignoring type issues (acceptable)
+    "PLC0415",  # Import should be at top-level (sometimes needed for conditional imports)
+    "E402",  # Module level import not at top of file (needed for submodule path setup)
+    "RUF059",  # Unpacked variable never used (acceptable for tuple unpacking)
+    "ARG001",  # Unused function argument (needed for interface compatibility)
+    "ARG002",  # Unused method argument (needed for interface compatibility)
+    "B007",  # Loop control variable not used (acceptable in some cases)
+    "RET504",  # Unnecessary assignment before return (acceptable for clarity)
+    "SIM102",  # Use single if statement (sometimes nested is clearer)
+    "SIM108",  # Use ternary operator (sometimes if-else is clearer)
+    "SIM115",  # Use context manager (NamedTemporaryFile needs special handling)
+    "SIM117",  # Use single with statement (sometimes nested is clearer)
+    "C416",  # Unnecessary list comprehension (acceptable)
+    "PLC0206",  # Extracting value from dict without .items() (acceptable)
+    "DTZ005",  # datetime.now() without tz (acceptable for local timestamps)
+]
 
 [tool.ruff.format]
 quote-style = "double"

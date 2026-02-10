@@ -1,5 +1,5 @@
+
 import numpy as np
-from collections import defaultdict
 import torch
 
 from genrl.constants import EPSILON

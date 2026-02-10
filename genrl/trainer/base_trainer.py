@@ -1,27 +1,26 @@
 """Base trainer class with common utilities for all trainers."""
 
-import os
 import datetime
-import time
 import json
+import os
 import re
 import shutil
+import time
 import warnings
-import inspect
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional, Tuple
+from typing import Any
+
 import torch
 from accelerate import Accelerator
 from accelerate.utils import ProjectConfiguration, set_seed
 from loguru import logger
-from diffusers.utils.torch_utils import is_compiled_module
 
 from genrl.config import Config
 from genrl.exceptions import ConfigurationError
 from genrl.utils import (
     build_accelerator,
-    resolve_resume_checkpoint,
     fast_init,
+    resolve_resume_checkpoint,
     unwrap_model,
 )
 
@@ -68,11 +67,10 @@ class BaseTrainer(ABC):
         if (
             hasattr(self.cfg.train, "weight_advantages")
             and self.cfg.train.weight_advantages
-        ):
-            if not self.cfg.reward_fn:
-                errors.append(
-                    "weight_advantages=True requires at least one reward in reward_fn"
-                )
+        ) and not self.cfg.reward_fn:
+            errors.append(
+                "weight_advantages=True requires at least one reward in reward_fn"
+            )
 
         # Warn if sde_window_size is 0 but sde_window_range is set
         # Also validate and truncate sde_window_range to [0, num_steps]
@@ -97,8 +95,7 @@ class BaseTrainer(ABC):
                 new_end = max(0, min(sde_window_range[1], num_steps))
 
                 # Ensure start <= end
-                if new_start > new_end:
-                    new_start = new_end
+                new_start = min(new_start, new_end)
 
                 truncated_range = (new_start, new_end)
 
@@ -124,7 +121,8 @@ class BaseTrainer(ABC):
                         )
 
         if errors:
-            raise ConfigurationError(f"Configuration errors: {', '.join(errors)}")
+            msg = f"Configuration errors: {', '.join(errors)}"
+            raise ConfigurationError(msg)
 
     def _setup_paths(self):
         """Setup run paths and directories.
@@ -164,7 +162,7 @@ class BaseTrainer(ABC):
 
         if is_main_process:
             # Main process generates the timestamp
-            unique_id = datetime.datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
+            unique_id = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y.%m.%d_%H.%M.%S")
 
             # Ensure base directory exists
             os.makedirs(base_save_dir, exist_ok=True)
@@ -191,38 +189,51 @@ class BaseTrainer(ABC):
                 wait_time += 0.1
 
             if not os.path.exists(timestamp_lock_file):
-                raise RuntimeError(
+                msg = (
                     f"Timestamp lock file not created by main process after {max_wait}s. "
                     f"Expected at: {timestamp_lock_file}. "
                     "This may indicate a synchronization issue in distributed training."
+                )
+                raise RuntimeError(
+                    msg
                 )
 
             # Double-check file is not stale before reading (defensive check)
             try:
                 age_seconds = time.time() - os.path.getmtime(timestamp_lock_file)
                 if age_seconds > max_stale_seconds:
-                    raise RuntimeError(
+                    msg = (
                         f"Timestamp lock file exists but is stale (age={age_seconds:.1f}s > "
                         f"{max_stale_seconds}s). File: {timestamp_lock_file}"
                     )
+                    raise RuntimeError(
+                        msg
+                    )
             except OSError as e:
-                raise RuntimeError(
+                msg = (
                     f"Failed to check timestamp lock file age: {e}. "
                     f"File: {timestamp_lock_file}"
+                )
+                raise RuntimeError(
+                    msg
                 ) from e
 
             # Read timestamp from lock file
             try:
-                with open(timestamp_lock_file, "r") as f:
+                with open(timestamp_lock_file) as f:
                     unique_id = f.read().strip()
                 if not unique_id:
+                    msg = f"Timestamp lock file is empty: {timestamp_lock_file}"
                     raise RuntimeError(
-                        f"Timestamp lock file is empty: {timestamp_lock_file}"
+                        msg
                     )
-            except (OSError, IOError) as e:
-                raise RuntimeError(
+            except OSError as e:
+                msg = (
                     f"Failed to read timestamp from lock file: {e}. "
                     f"File: {timestamp_lock_file}"
+                )
+                raise RuntimeError(
+                    msg
                 ) from e
 
         self.cfg.run_name = (
@@ -269,10 +280,9 @@ class BaseTrainer(ABC):
                     # Only log 0-dim tensors as scalars
                     if value.ndim == 0:
                         # Ensure tensor is on CPU for .item() call
-                        if value.is_cuda:
-                            value = value.cpu()
+                        value_cpu = value.cpu() if value.is_cuda else value
                         try:
-                            scalar_items[key] = float(value.item())
+                            scalar_items[key] = float(value_cpu.item())
                         except (ValueError, RuntimeError):
                             # Skip if .item() fails
                             continue
@@ -380,7 +390,7 @@ class BaseTrainer(ABC):
 
     def calculate_gradient_accumulation_steps(
         self, num_train_timesteps: int
-    ) -> Tuple[int, int]:
+    ) -> tuple[int, int]:
         """Calculate gradient accumulation steps.
 
         Args:
@@ -397,7 +407,7 @@ class BaseTrainer(ABC):
         gradient_accumulation_steps = base_gas * num_train_timesteps
         return base_gas, gradient_accumulation_steps
 
-    def get_train_timesteps(self, num_train_timesteps: int) -> List[int]:
+    def get_train_timesteps(self, num_train_timesteps: int) -> list[int]:
         """Get list of training timesteps.
 
         Args:
@@ -406,10 +416,10 @@ class BaseTrainer(ABC):
         Returns:
             List of timestep indices.
         """
-        return [step_index for step_index in range(num_train_timesteps)]
+        return list(range(num_train_timesteps))
 
     def setup_optimizer(
-        self, parameters: List[torch.nn.Parameter], use_8bit: bool = False
+        self, parameters: list[torch.nn.Parameter], use_8bit: bool = False
     ) -> torch.optim.Optimizer:
         """Setup optimizer for training.
 
@@ -532,31 +542,30 @@ class BaseTrainer(ABC):
             accelerator.is_main_process
             and cfg.num_checkpoint_limit is not None
             and cfg.num_checkpoint_limit > 0
-        ):
-            if os.path.exists(checkpoints_dir):
-                # Get all checkpoint directories
-                checkpoint_folders = []
-                for item in os.listdir(checkpoints_dir):
-                    checkpoint_path = os.path.join(checkpoints_dir, item)
-                    if os.path.isdir(checkpoint_path) and item.startswith(
-                        "checkpoint-"
-                    ):
-                        # Extract step number from folder name (e.g., "checkpoint-120" -> 120)
-                        match = re.search(r"checkpoint-(\d+)", item)
-                        if match:
-                            step_num = int(match.group(1))
-                            checkpoint_folders.append((step_num, checkpoint_path))
+        ) and os.path.exists(checkpoints_dir):
+            # Get all checkpoint directories
+            checkpoint_folders = []
+            for item in os.listdir(checkpoints_dir):
+                checkpoint_path = os.path.join(checkpoints_dir, item)
+                if os.path.isdir(checkpoint_path) and item.startswith(
+                    "checkpoint-"
+                ):
+                    # Extract step number from folder name (e.g., "checkpoint-120" -> 120)
+                    match = re.search(r"checkpoint-(\d+)", item)
+                    if match:
+                        step_num = int(match.group(1))
+                        checkpoint_folders.append((step_num, checkpoint_path))
 
-                # Sort by step number (oldest first)
-                checkpoint_folders.sort(key=lambda x: x[0])
+            # Sort by step number (oldest first)
+            checkpoint_folders.sort(key=lambda x: x[0])
 
-                # Delete oldest checkpoints if we exceed the limit
-                # After save, we now have len(checkpoint_folders) checkpoints total
-                if len(checkpoint_folders) > cfg.num_checkpoint_limit:
-                    num_to_delete = len(checkpoint_folders) - cfg.num_checkpoint_limit
-                    for step_num, folder_path in checkpoint_folders[:num_to_delete]:
-                        shutil.rmtree(folder_path)
-                        logger.info(f"Deleted old checkpoint: checkpoint-{step_num}")
+            # Delete oldest checkpoints if we exceed the limit
+            # After save, we now have len(checkpoint_folders) checkpoints total
+            if len(checkpoint_folders) > cfg.num_checkpoint_limit:
+                num_to_delete = len(checkpoint_folders) - cfg.num_checkpoint_limit
+                for step_num, folder_path in checkpoint_folders[:num_to_delete]:
+                    shutil.rmtree(folder_path)
+                    logger.info(f"Deleted old checkpoint: checkpoint-{step_num}")
 
         # Final synchronization: ensure all processes complete all save operations before returning
         accelerator.wait_for_everyone()
@@ -585,7 +594,7 @@ class BaseTrainer(ABC):
 
             meta_path = os.path.join(resume_path, "metadata.json")
             if os.path.exists(meta_path):
-                with open(meta_path, "r") as f:
+                with open(meta_path) as f:
                     metadata = json.load(f)
                 global_step = metadata.get("global_step", 0)
                 first_epoch = metadata.get("epoch", 0)
@@ -605,14 +614,15 @@ class BaseTrainer(ABC):
                     self.ema.load_state_dict(ema_state)
                     self.ema.to(accelerator.device)
                 else:
-                    raise ValueError(f"No EMA state found at {ema_state_path}")
+                    msg = f"No EMA state found at {ema_state_path}"
+                    raise ValueError(msg)
 
             # Call hook method for trainer-specific resume logic
             self._on_resume_from_checkpoint(accelerator)
 
         return first_epoch, global_step, resume_epoch_tag
 
-    def _on_resume_from_checkpoint(self, accelerator: Accelerator):
+    def _on_resume_from_checkpoint(self, accelerator: Accelerator):  # noqa: B027
         """Hook method called after loading checkpoint state.
 
         Subclasses can override this to perform trainer-specific resume operations,
@@ -621,7 +631,6 @@ class BaseTrainer(ABC):
         Args:
             accelerator: Accelerator instance.
         """
-        pass
 
     @abstractmethod
     def train(self):
@@ -630,4 +639,5 @@ class BaseTrainer(ABC):
         Raises:
             NotImplementedError: If not implemented by subclass.
         """
-        raise NotImplementedError("Subclasses must implement train() method")
+        msg = "Subclasses must implement train() method"
+        raise NotImplementedError(msg)

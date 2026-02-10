@@ -1,11 +1,10 @@
 import contextlib
-from typing import Tuple, Union
 
 import numpy as np
 import torch
 
 
-def prepare_images(images: Union[torch.Tensor, np.ndarray]) -> Tuple[np.ndarray, bool]:
+def prepare_images(images: torch.Tensor | np.ndarray) -> tuple[np.ndarray, bool]:
     """Prepare images for reward evaluation.
 
     Converts torch.Tensor images to numpy arrays in HWC format.
@@ -27,7 +26,8 @@ def prepare_images(images: Union[torch.Tensor, np.ndarray]) -> Tuple[np.ndarray,
             images = images.permute(0, 1, 3, 4, 2)  # NFCHW -> NFHWC
             is_video = True
         else:
-            raise ValueError(f"Unsupported tensor shape: {images.shape}")
+            msg = f"Unsupported tensor shape: {images.shape}"
+            raise ValueError(msg)
         images = (images * 255).round().clamp(0, 255).to(torch.uint8).cpu().numpy()
     else:
         # Assume numpy array - determine if video based on dimensions
@@ -36,7 +36,8 @@ def prepare_images(images: Union[torch.Tensor, np.ndarray]) -> Tuple[np.ndarray,
         elif images.ndim == 5:
             is_video = True
         else:
-            raise ValueError(f"Unsupported array shape: {images.shape}")
+            msg = f"Unsupported array shape: {images.shape}"
+            raise ValueError(msg)
         # Ensure uint8 dtype
         if images.dtype != np.uint8:
             images = (images * 255).round().clip(0, 255).astype(np.uint8)

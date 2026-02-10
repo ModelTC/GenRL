@@ -1,7 +1,9 @@
 """Evaluation utilities for trainers."""
 
 from collections import defaultdict
-from typing import Any, Callable, List, Optional
+from collections.abc import Callable
+from typing import Any
+
 import numpy as np
 import torch
 import tqdm
@@ -10,10 +12,10 @@ from accelerate.utils import set_seed
 from loguru import logger
 
 from genrl.config import Config
-from genrl.trainer.embeddings import wan_compute_text_embeddings
 from genrl.diffusers_patch.wan_pipeline_with_logprob import (
     wan_pipeline_with_logprob,
 )
+from genrl.trainer.embeddings import wan_compute_text_embeddings
 from genrl.utils import log_videos
 
 tqdm = tqdm.tqdm
@@ -24,15 +26,15 @@ def wan_eval_once(
     accelerator: Accelerator,
     pipeline: Any,  # Pipeline with scheduler and tokenizer
     test_dataloader: torch.utils.data.DataLoader,
-    text_encoders: List[Any],
-    tokenizers: List[Any],
+    text_encoders: list[Any],
+    tokenizers: list[Any],
     sample_neg_prompt_embeds: torch.Tensor,
     eval_reward_fn: Callable,
     autocast: Any,
     global_step: int,
     ema: Any | None,
-    transformer_params: List[torch.nn.Parameter] | None,
-    log_metrics: Optional[Callable[[Accelerator, dict, int], None]] = None,
+    transformer_params: list[torch.nn.Parameter] | None,
+    log_metrics: Callable[[Accelerator, dict, int], None] | None = None,
 ):
     """Full eval loop aligned to original behavior: iterate all batches, log rewards/videos.
 
@@ -77,31 +79,30 @@ def wan_eval_once(
             max_sequence_length=512,
             device=accelerator.device,
         )
-        with autocast():
-            with torch.no_grad():
-                videos_eval, _, _, _, _ = wan_pipeline_with_logprob(
-                    pipeline,
-                    prompt_embeds=test_embeds,
-                    negative_prompt_embeds=sample_neg_prompt_embeds[: len(test_embeds)],
-                    num_inference_steps=cfg.sample.eval_num_steps,
-                    guidance_scale=eval_guidance,
-                    output_type="pt",
-                    return_dict=False,
-                    num_frames=cfg.frames,
-                    height=cfg.height,
-                    width=cfg.width,
-                    deterministic=True,
-                    kl_reward=0,
-                    noise_level=cfg.sample.noise_level,
-                    sde_type=cfg.sample.sde_type,
-                    diffusion_clip=cfg.sample.diffusion_clip,
-                    diffusion_clip_value=cfg.sample.diffusion_clip_value,
-                    sde_window_size=0,
-                    sde_window_range=None,
-                    # For evaluation, we don't need to compute KL reward and
-                    # don't need sde_window_size and sde_window_range
-                    # because we are not training
-                )
+        with autocast(), torch.no_grad():
+            videos_eval, _, _, _, _ = wan_pipeline_with_logprob(
+                pipeline,
+                prompt_embeds=test_embeds,
+                negative_prompt_embeds=sample_neg_prompt_embeds[: len(test_embeds)],
+                num_inference_steps=cfg.sample.eval_num_steps,
+                guidance_scale=eval_guidance,
+                output_type="pt",
+                return_dict=False,
+                num_frames=cfg.frames,
+                height=cfg.height,
+                width=cfg.width,
+                deterministic=True,
+                kl_reward=0,
+                noise_level=cfg.sample.noise_level,
+                sde_type=cfg.sample.sde_type,
+                diffusion_clip=cfg.sample.diffusion_clip,
+                diffusion_clip_value=cfg.sample.diffusion_clip_value,
+                sde_window_size=0,
+                sde_window_range=None,
+                # For evaluation, we don't need to compute KL reward and
+                # don't need sde_window_size and sde_window_range
+                # because we are not training
+            )
         rewards_eval, reward_meta = eval_reward_fn(
             videos_eval, test_prompts, test_metadata, False
         )
@@ -118,7 +119,7 @@ def wan_eval_once(
     all_rewards = {k: np.concatenate(v) for k, v in all_rewards.items()}
     if accelerator.is_main_process:
         # Only log raw scores (ending with '_raw')
-        raw_keys = [k for k in all_rewards.keys() if k.endswith("_raw")]
+        raw_keys = [k for k in all_rewards if k.endswith("_raw")]
         metrics = {
             f"eval_reward_{k}": float(np.mean(v))
             for k, v in all_rewards.items()

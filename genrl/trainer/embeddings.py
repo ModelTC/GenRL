@@ -1,14 +1,16 @@
 """Text embedding utilities for trainers."""
 
-from typing import Any, List
+from typing import Any
+
 import torch
+
 from genrl.diffusers_patch.wan_prompt_embedding import encode_prompt
 
 
 def wan_compute_text_embeddings(
-    prompt: str | List[str],
-    text_encoders: List[Any],
-    tokenizers: List[Any],
+    prompt: str | list[str],
+    text_encoders: list[Any],
+    tokenizers: list[Any],
     max_sequence_length: int,
     device: torch.device,
 ) -> torch.FloatTensor:
@@ -28,5 +30,4 @@ def wan_compute_text_embeddings(
         prompt_embeds = encode_prompt(
             text_encoders, tokenizers, prompt, max_sequence_length
         )
-        prompt_embeds = prompt_embeds.to(device)
-    return prompt_embeds
+        return prompt_embeds.to(device)

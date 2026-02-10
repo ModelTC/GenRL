@@ -1,30 +1,28 @@
-import os
-import json
-import hashlib
 import contextlib
-import re
-import shutil
 import gc
-from typing import Any, Dict, List, Optional, Tuple, Type
+import hashlib
+import os
+from typing import Any
 
 import imageio
-import wandb
 import numpy as np
+import torch
 from accelerate import Accelerator, FullyShardedDataParallelPlugin
 from accelerate.utils import ProjectConfiguration
 from diffusers.utils.torch_utils import is_compiled_module
-import torch
 from transformers.modeling_utils import no_init_weights
 
+import wandb
+
 # fast init helpers
-_ORIGINAL_INITS: Dict[Type[torch.nn.Module], Any] = {
+_ORIGINAL_INITS: dict[type[torch.nn.Module], Any] = {
     torch.nn.Linear: torch.nn.Linear.__init__,
     torch.nn.Embedding: torch.nn.Embedding.__init__,
     torch.nn.LayerNorm: torch.nn.LayerNorm.__init__,
 }
 
 
-def _get_fast_init(cls: Type[torch.nn.Module], device: torch.device):
+def _get_fast_init(cls: type[torch.nn.Module], device: torch.device):
     assert cls in _ORIGINAL_INITS
 
     def _fast_init(self, *args, **kwargs):
@@ -68,14 +66,13 @@ def build_accelerator(
     """
     fsdp_cfg = cfg.accelerate.fsdp_config.__dict__
     fsdp_plugin = FullyShardedDataParallelPlugin(**fsdp_cfg)
-    accelerator = Accelerator(
+    return Accelerator(
         log_with="wandb",
         mixed_precision=cfg.accelerate.mixed_precision,
         project_config=project_config,
         gradient_accumulation_steps=grad_acc_steps,
         fsdp_plugin=fsdp_plugin,
     )
-    return accelerator
 
 
 def unwrap_model(model: torch.nn.Module, accelerator: Accelerator) -> torch.nn.Module:
@@ -93,11 +90,10 @@ def unwrap_model(model: torch.nn.Module, accelerator: Accelerator) -> torch.nn.M
     # it only removes top-level FSDP wrapper, not nested ones. However, for PEFT models,
     # the FSDP wrapper should be at the top level, so this should be sufficient.
     model = accelerator.unwrap_model(model)
-    model = model._orig_mod if is_compiled_module(model) else model
-    return model
+    return model._orig_mod if is_compiled_module(model) else model
 
 
-def resolve_resume_checkpoint(resume_from: Optional[str]) -> Optional[str]:
+def resolve_resume_checkpoint(resume_from: str | None) -> str | None:
     """Resolve explicit checkpoint or latest checkpoint-* within a directory.
 
     Args:
@@ -120,17 +116,16 @@ def resolve_resume_checkpoint(resume_from: Optional[str]) -> Optional[str]:
     return os.path.join(resume_from, latest)
 
 
-def cleanup_memory(accelerator: Optional[Accelerator] = None) -> None:
+def cleanup_memory(accelerator: Accelerator | None = None) -> None:
     """Release Python and CUDA memory after heavy steps."""
     gc.collect()
-    if torch.cuda.is_available():
-        if accelerator is None or accelerator.device.type == "cuda":
-            torch.cuda.empty_cache()
+    if torch.cuda.is_available() and (accelerator is None or accelerator.device.type == "cuda"):
+        torch.cuda.empty_cache()
 
 
 def create_generator(
-    prompts: List[str], base_seed: int, device: Optional[torch.device] = None
-) -> List[torch.Generator]:
+    prompts: list[str], base_seed: int, device: torch.device | None = None
+) -> list[torch.Generator]:
     """Create a deterministic torch.Generator per prompt, seeded by prompt hash + base_seed.
 
     Args:
@@ -143,7 +138,7 @@ def create_generator(
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    generators: List[torch.Generator] = []
+    generators: list[torch.Generator] = []
     for prompt in prompts:
         hash_digest = hashlib.sha256(prompt.encode()).digest()
         prompt_hash_int = int.from_bytes(hash_digest[:4], "big")
@@ -158,8 +153,8 @@ def log_videos(
     cfg: Any,
     accelerator: Accelerator,
     videos: torch.Tensor,
-    prompts: List[str],
-    rewards: Dict[str, Any],
+    prompts: list[str],
+    rewards: dict[str, Any],
     step: int,
 ) -> None:
     """Log sampled videos to disk and wandb.
@@ -182,14 +177,14 @@ def log_videos(
     video_paths = []
     for idx, i in enumerate(sample_indices):
         video = videos[i]
-        frames = [img for img in video.cpu().numpy().transpose(0, 2, 3, 1)]
+        frames = list(video.cpu().numpy().transpose(0, 2, 3, 1))
         frames = [(frame * 255).astype(np.uint8) for frame in frames]
         out_path = os.path.join(video_dir, f"{tag}_{step}_{idx}.mp4")
         imageio.mimsave(out_path, frames, fps=16, codec="libx264", format="FFMPEG")
         video_paths.append(out_path)
     # Collect all raw reward keys (ending with '_raw')
     # Note: raw_keys should always exist since reward_fn is called with return_raw_scores=True
-    raw_keys = [k for k in rewards.keys() if k.endswith("_raw")]
+    raw_keys = [k for k in rewards if k.endswith("_raw")]
     raw_keys.sort()  # Sort for consistent ordering
 
     accelerator.log(
@@ -206,7 +201,7 @@ def log_videos(
                 for path, prompt, sample_idx in zip(
                     video_paths,
                     [prompts[idx] for idx in sample_indices],
-                    sample_indices,
+                    sample_indices, strict=False,
                 )
             ]
         },
@@ -215,8 +210,8 @@ def log_videos(
 
 
 def calculate_zero_std_ratio(
-    prompts: List[str],
-    gathered_rewards: Dict[str, np.ndarray],
+    prompts: list[str],
+    gathered_rewards: dict[str, np.ndarray],
     reward_key: str = "ori_avg",
 ) -> float:
     """Compute zero-std ratio for rewards grouped by prompt.
@@ -230,7 +225,7 @@ def calculate_zero_std_ratio(
         Fraction of prompts whose reward std is exactly zero.
     """
     prompt_array = np.array(prompts)
-    unique_prompts, inverse_indices, counts = np.unique(
+    _unique_prompts, inverse_indices, counts = np.unique(
         prompt_array, return_inverse=True, return_counts=True
     )
     # Handle multi-dimensional rewards (e.g., (total_batch_size, num_timesteps))
@@ -243,7 +238,6 @@ def calculate_zero_std_ratio(
     reward_groups = np.split(grouped_rewards, split_indices)
     prompt_std_devs = np.array([np.std(group) for group in reward_groups])
     zero_std_count = np.count_nonzero(prompt_std_devs == 0)
-    zero_std_ratio = (
+    return (
         zero_std_count / len(prompt_std_devs) if len(prompt_std_devs) else 0.0
     )
-    return zero_std_ratio
