@@ -4,12 +4,12 @@ repos:
     rev: v0.11.0
     hooks:
       - id: ruff
-        args: [--fix, --respect-gitignore, --config=pyproject.toml]
+        args: [--fix, --respect-gitignore, --config=pyproject.toml, --extend-exclude=genrl/reward/VideoAlign, --extend-exclude=genrl/reward/HPSv3]
       - id: ruff-format
-        args: [--config=pyproject.toml]
+        args: [--config=pyproject.toml, --extend-exclude=genrl/reward/VideoAlign, --extend-exclude=genrl/reward/HPSv3]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v5.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
