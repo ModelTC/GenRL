@@ -38,9 +38,7 @@ def set_videoalign_device(device) -> None:
             inferencer.model.to(target)
 
 
-def _get_inferencer(
-    checkpoint_path: str, device, dtype: torch.dtype
-) -> VideoVLMRewardInference:
+def _get_inferencer(checkpoint_path: str, device, dtype: torch.dtype) -> VideoVLMRewardInference:
     """Get or create VideoAlign inferencer (cached per checkpoint/device/dtype).
 
     Args:
@@ -101,9 +99,7 @@ def _convert_to_grayscale(images: np.ndarray) -> np.ndarray:
         # Expand to 3 channels: (N, F, H, W) -> (N, F, H, W, 3)
         return np.stack([gray, gray, gray], axis=-1)
     msg = f"Unsupported array shape for grayscale conversion: {images.shape}"
-    raise ValueError(
-        msg
-    )
+    raise ValueError(msg)
 
 
 def _save_video_to_temp(frames: np.ndarray, fps: float = 8.0) -> str:
@@ -144,9 +140,7 @@ def videoalign_mq_score(device, checkpoint_path: str | None = None):
     """
     if checkpoint_path is None:
         # Default to VideoAlign checkpoints directory
-        checkpoint_path = os.path.join(
-            os.path.dirname(__file__), "VideoAlign", "checkpoints"
-        )
+        checkpoint_path = os.path.join(os.path.dirname(__file__), "VideoAlign", "checkpoints")
 
     # Resolve absolute path
     checkpoint_path = os.path.abspath(checkpoint_path)
@@ -205,9 +199,7 @@ def videoalign_mq_score(device, checkpoint_path: str | None = None):
                 mq_score = video_rewards[0]["MQ"]
                 rewards.append(mq_score)
 
-            rewards = torch.tensor(
-                rewards, dtype=torch.float32, device=device_for_tensor
-            )
+            rewards = torch.tensor(rewards, dtype=torch.float32, device=device_for_tensor)
             return {"avg": rewards}, {}
 
         finally:
@@ -237,9 +229,7 @@ def videoalign_ta_score(device, checkpoint_path: str | None = None):
     """
     if checkpoint_path is None:
         # Default to VideoAlign checkpoints directory
-        checkpoint_path = os.path.join(
-            os.path.dirname(__file__), "VideoAlign", "checkpoints"
-        )
+        checkpoint_path = os.path.join(os.path.dirname(__file__), "VideoAlign", "checkpoints")
 
     # Resolve absolute path
     checkpoint_path = os.path.abspath(checkpoint_path)
@@ -296,9 +286,7 @@ def videoalign_ta_score(device, checkpoint_path: str | None = None):
                 ta_score = video_rewards[0]["TA"]
                 rewards.append(ta_score)
 
-            rewards = torch.tensor(
-                rewards, dtype=torch.float32, device=device_for_tensor
-            )
+            rewards = torch.tensor(rewards, dtype=torch.float32, device=device_for_tensor)
             return {"avg": rewards}, {}
 
         finally:

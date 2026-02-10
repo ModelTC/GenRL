@@ -51,9 +51,7 @@ def fast_init(device: torch.device, init_weights: bool = False):
         cls.__init__ = _ORIGINAL_INITS[cls]
 
 
-def build_accelerator(
-    cfg: Any, grad_acc_steps: int, project_config: ProjectConfiguration
-) -> Accelerator:
+def build_accelerator(cfg: Any, grad_acc_steps: int, project_config: ProjectConfiguration) -> Accelerator:
     """Construct an Accelerate `Accelerator` with FSDP plugin.
 
     Args:
@@ -123,9 +121,7 @@ def cleanup_memory(accelerator: Accelerator | None = None) -> None:
         torch.cuda.empty_cache()
 
 
-def create_generator(
-    prompts: list[str], base_seed: int, device: torch.device | None = None
-) -> list[torch.Generator]:
+def create_generator(prompts: list[str], base_seed: int, device: torch.device | None = None) -> list[torch.Generator]:
     """Create a deterministic torch.Generator per prompt, seeded by prompt hash + base_seed.
 
     Args:
@@ -193,15 +189,14 @@ def log_videos(
                 wandb.Video(
                     path,
                     caption=f"{prompt:.20} | "
-                    + ", ".join(
-                        f"{key}: {rewards[key][sample_idx]:.2f}" for key in raw_keys
-                    ),
+                    + ", ".join(f"{key}: {rewards[key][sample_idx]:.2f}" for key in raw_keys),
                     format="mp4",
                 )
                 for path, prompt, sample_idx in zip(
                     video_paths,
                     [prompts[idx] for idx in sample_indices],
-                    sample_indices, strict=False,
+                    sample_indices,
+                    strict=False,
                 )
             ]
         },
@@ -225,9 +220,7 @@ def calculate_zero_std_ratio(
         Fraction of prompts whose reward std is exactly zero.
     """
     prompt_array = np.array(prompts)
-    _unique_prompts, inverse_indices, counts = np.unique(
-        prompt_array, return_inverse=True, return_counts=True
-    )
+    _unique_prompts, inverse_indices, counts = np.unique(prompt_array, return_inverse=True, return_counts=True)
     # Handle multi-dimensional rewards (e.g., (total_batch_size, num_timesteps))
     # by taking mean across timesteps for std calculation
     rewards = gathered_rewards[reward_key]
@@ -238,6 +231,4 @@ def calculate_zero_std_ratio(
     reward_groups = np.split(grouped_rewards, split_indices)
     prompt_std_devs = np.array([np.std(group) for group in reward_groups])
     zero_std_count = np.count_nonzero(prompt_std_devs == 0)
-    return (
-        zero_std_count / len(prompt_std_devs) if len(prompt_std_devs) else 0.0
-    )
+    return zero_std_count / len(prompt_std_devs) if len(prompt_std_devs) else 0.0

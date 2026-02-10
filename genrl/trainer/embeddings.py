@@ -27,7 +27,5 @@ def wan_compute_text_embeddings(
         Tensor of encoded prompt embeddings on `device`.
     """
     with torch.no_grad():
-        prompt_embeds = encode_prompt(
-            text_encoders, tokenizers, prompt, max_sequence_length
-        )
+        prompt_embeds = encode_prompt(text_encoders, tokenizers, prompt, max_sequence_length)
         return prompt_embeds.to(device)

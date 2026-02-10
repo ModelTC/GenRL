@@ -1,4 +1,3 @@
-
 import numpy as np
 import torch
 from Levenshtein import distance
@@ -35,13 +34,7 @@ def video_ocr_score():
             for frame in frames:
                 try:
                     result = ocr.ocr(frame, cls=False)
-                    text = (
-                        "".join(
-                            [res[1][0] if res[1][1] > 0 else "" for res in result[0]]
-                        )
-                        if result[0]
-                        else ""
-                    )
+                    text = "".join([res[1][0] if res[1][1] > 0 else "" for res in result[0]]) if result[0] else ""
                     text = text.replace(" ", "").lower()
                     dist = distance(text, prompt)
                     dist = min(dist, len(prompt))

@@ -35,9 +35,7 @@ def load_reward_fn(name: str, device, module_path: str | None = None):
     if name in builtin:
         fn = builtin[name]
         sig = inspect.signature(fn)
-        accepts_device = any(
-            p.name in {"device", "dev"} for p in sig.parameters.values()
-        )
+        accepts_device = any(p.name in {"device", "dev"} for p in sig.parameters.values())
         return fn(device) if accepts_device else fn()
 
     # Fallback: zero reward
@@ -49,9 +47,7 @@ def load_reward_fn(name: str, device, module_path: str | None = None):
     return _fn
 
 
-def multi_score(
-    device, reward_cfg, module_path: str | None = None, return_raw_scores: bool = False
-):
+def multi_score(device, reward_cfg, module_path: str | None = None, return_raw_scores: bool = False):
     """Compose multiple reward heads defined in reward_cfg dict name->weight.
 
     Args:
@@ -82,9 +78,7 @@ def multi_score(
             if return_raw_scores:
                 scores[f"{name}_raw"] = val  # Store raw (unweighted) scores
             scores[name] = val * weights[name]  # Store weighted scores
-        stacked = torch.stack(
-            [scores[name] for name in reward_cfg], dim=0
-        )
+        stacked = torch.stack([scores[name] for name in reward_cfg], dim=0)
         scores["avg"] = stacked.mean(0)
         return scores, {}
 

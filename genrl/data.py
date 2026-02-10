@@ -32,9 +32,7 @@ class TextPromptDataset(Dataset):
     def collate_fn(examples: list[dict]) -> tuple[int | None, list[str], list[dict]]:
         """Batch prompts while preserving a consistent epoch tag."""
         epoch_tags = [example.get("epoch") for example in examples]
-        epoch_tag = (
-            epoch_tags[0] if all(tag == epoch_tags[0] for tag in epoch_tags) else None
-        )
+        epoch_tag = epoch_tags[0] if all(tag == epoch_tags[0] for tag in epoch_tags) else None
         prompts = [example["prompt"] for example in examples]
         metadatas = [example["metadata"] for example in examples]
         return epoch_tag, prompts, metadatas
@@ -66,9 +64,7 @@ class GenevalPromptDataset(Dataset):
     def collate_fn(examples: list[dict]) -> tuple[int | None, list[str], list[dict]]:
         """Batch Geneval items while preserving epoch tags."""
         epoch_tags = [example.get("epoch") for example in examples]
-        epoch_tag = (
-            epoch_tags[0] if all(tag == epoch_tags[0] for tag in epoch_tags) else None
-        )
+        epoch_tag = epoch_tags[0] if all(tag == epoch_tags[0] for tag in epoch_tags) else None
         prompts = [example["prompt"] for example in examples]
         metadatas = [example["metadata"] for example in examples]
         return epoch_tag, prompts, metadatas
@@ -93,9 +89,7 @@ class JsonPromptDataset(Dataset):
         self.file_path = os.path.join(dataset, f"{split}.json")
         self._prompts = None
         self._metadatas = None
-        self._file_size = (
-            os.path.getsize(self.file_path) if os.path.exists(self.file_path) else 0
-        )
+        self._file_size = os.path.getsize(self.file_path) if os.path.exists(self.file_path) else 0
 
         # Optimization strategy:
         # - For training data, load directly to memory even if large (frequent random access needed)
@@ -185,11 +179,7 @@ class JsonPromptDataset(Dataset):
 
         start_offset = self._line_offsets[idx]
         # Calculate end offset (start of next line or end of file)
-        end_offset = (
-            self._line_offsets[idx + 1]
-            if idx + 1 < len(self._line_offsets)
-            else self._file_size
-        )
+        end_offset = self._line_offsets[idx + 1] if idx + 1 < len(self._line_offsets) else self._file_size
 
         with open(self.file_path, encoding="utf-8") as f:
             f.seek(start_offset)
@@ -257,9 +247,7 @@ class JsonPromptDataset(Dataset):
             Tuple of (epoch_tag, prompts, metadatas) where epoch_tag is None if inconsistent.
         """
         epoch_tags = [example.get("epoch") for example in examples]
-        epoch_tag = (
-            epoch_tags[0] if all(tag == epoch_tags[0] for tag in epoch_tags) else None
-        )
+        epoch_tag = epoch_tags[0] if all(tag == epoch_tags[0] for tag in epoch_tags) else None
         prompts = [example["prompt"] for example in examples]
         metadatas = [example["metadata"] for example in examples]
         return epoch_tag, prompts, metadatas
@@ -292,9 +280,9 @@ class DistributedKRepeatSampler(Sampler):
         self.rank = rank
         self.seed = seed
         self.total_samples = self.num_replicas * self.batch_size
-        assert (
-            self.total_samples % self.k == 0
-        ), f"k can not div n*b, k{k}-num_replicas{num_replicas}-batch_size{batch_size}"
+        assert self.total_samples % self.k == 0, (
+            f"k can not div n*b, k{k}-num_replicas{num_replicas}-batch_size{batch_size}"
+        )
         self.m = self.total_samples // self.k
         self.epoch = 0
 
@@ -305,17 +293,13 @@ class DistributedKRepeatSampler(Sampler):
             g.manual_seed(self.seed + self.epoch)
             indices = torch.randperm(len(self.dataset), generator=g)[: self.m].tolist()
             repeated_indices = [idx for idx in indices for _ in range(self.k)]
-            shuffled_indices = torch.randperm(
-                len(repeated_indices), generator=g
-            ).tolist()
+            shuffled_indices = torch.randperm(len(repeated_indices), generator=g).tolist()
             shuffled_samples = [repeated_indices[i] for i in shuffled_indices]
             per_card_samples = []
             for i in range(self.num_replicas):
                 start = i * self.batch_size
                 end = start + self.batch_size
-                per_card_samples.append(
-                    [(self.epoch, idx) for idx in shuffled_samples[start:end]]
-                )
+                per_card_samples.append([(self.epoch, idx) for idx in shuffled_samples[start:end]])
             yield per_card_samples[self.rank]
 
     def set_epoch(self, epoch: int):
@@ -323,9 +307,7 @@ class DistributedKRepeatSampler(Sampler):
         self.epoch = epoch
 
 
-def build_dataloaders(
-    cfg, accelerator
-) -> tuple[DataLoader, DataLoader, DistributedKRepeatSampler]:
+def build_dataloaders(cfg, accelerator) -> tuple[DataLoader, DataLoader, DistributedKRepeatSampler]:
     """Construct train/eval dataloaders and sampler with epoch tags.
 
     Args:
@@ -350,9 +332,7 @@ def build_dataloaders(
         collate_fn = JsonPromptDataset.collate_fn
     else:
         msg = "Only general_ocr, geneval, or filtered_prompts prompt_fn supported"
-        raise NotImplementedError(
-            msg
-        )
+        raise NotImplementedError(msg)
 
     train_sampler = DistributedKRepeatSampler(
         dataset=train_dataset,

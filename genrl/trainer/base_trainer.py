@@ -65,18 +65,13 @@ class BaseTrainer(ABC):
             errors.append("reward_fn cannot be empty")
 
         if (
-            hasattr(self.cfg.train, "weight_advantages")
-            and self.cfg.train.weight_advantages
+            hasattr(self.cfg.train, "weight_advantages") and self.cfg.train.weight_advantages
         ) and not self.cfg.reward_fn:
-            errors.append(
-                "weight_advantages=True requires at least one reward in reward_fn"
-            )
+            errors.append("weight_advantages=True requires at least one reward in reward_fn")
 
         # Warn if sde_window_size is 0 but sde_window_range is set
         # Also validate and truncate sde_window_range to [0, num_steps]
-        if hasattr(self.cfg.sample, "sde_window_size") and hasattr(
-            self.cfg.sample, "sde_window_range"
-        ):
+        if hasattr(self.cfg.sample, "sde_window_size") and hasattr(self.cfg.sample, "sde_window_range"):
             sde_window_size = getattr(self.cfg.sample, "sde_window_size", 0) or 0
             sde_window_range = getattr(self.cfg.sample, "sde_window_range", None)
             if sde_window_size == 0 and sde_window_range is not None:
@@ -156,9 +151,7 @@ class BaseTrainer(ABC):
             or os.environ.get("JOB_ID")
         )
         lock_suffix = f".{run_id}" if run_id else ""
-        timestamp_lock_file = os.path.join(
-            base_save_dir, f".run_timestamp_lock{lock_suffix}"
-        )
+        timestamp_lock_file = os.path.join(base_save_dir, f".run_timestamp_lock{lock_suffix}")
 
         if is_main_process:
             # Main process generates the timestamp
@@ -194,9 +187,7 @@ class BaseTrainer(ABC):
                     f"Expected at: {timestamp_lock_file}. "
                     "This may indicate a synchronization issue in distributed training."
                 )
-                raise RuntimeError(
-                    msg
-                )
+                raise RuntimeError(msg)
 
             # Double-check file is not stale before reading (defensive check)
             try:
@@ -206,17 +197,10 @@ class BaseTrainer(ABC):
                         f"Timestamp lock file exists but is stale (age={age_seconds:.1f}s > "
                         f"{max_stale_seconds}s). File: {timestamp_lock_file}"
                     )
-                    raise RuntimeError(
-                        msg
-                    )
+                    raise RuntimeError(msg)
             except OSError as e:
-                msg = (
-                    f"Failed to check timestamp lock file age: {e}. "
-                    f"File: {timestamp_lock_file}"
-                )
-                raise RuntimeError(
-                    msg
-                ) from e
+                msg = f"Failed to check timestamp lock file age: {e}. File: {timestamp_lock_file}"
+                raise RuntimeError(msg) from e
 
             # Read timestamp from lock file
             try:
@@ -224,28 +208,15 @@ class BaseTrainer(ABC):
                     unique_id = f.read().strip()
                 if not unique_id:
                     msg = f"Timestamp lock file is empty: {timestamp_lock_file}"
-                    raise RuntimeError(
-                        msg
-                    )
+                    raise RuntimeError(msg)
             except OSError as e:
-                msg = (
-                    f"Failed to read timestamp from lock file: {e}. "
-                    f"File: {timestamp_lock_file}"
-                )
-                raise RuntimeError(
-                    msg
-                ) from e
+                msg = f"Failed to read timestamp from lock file: {e}. File: {timestamp_lock_file}"
+                raise RuntimeError(msg) from e
 
-        self.cfg.run_name = (
-            self.cfg.run_name + "_" + unique_id if self.cfg.run_name else unique_id
-        )
+        self.cfg.run_name = self.cfg.run_name + "_" + unique_id if self.cfg.run_name else unique_id
         # Add run_name (with timestamp) as subdirectory to save_dir
-        self.cfg.paths.save_dir = os.path.join(
-            self.cfg.paths.save_dir, self.cfg.run_name
-        )
-        self.resume_path = resolve_resume_checkpoint(
-            getattr(self.cfg.paths, "resume_from", None)
-        )
+        self.cfg.paths.save_dir = os.path.join(self.cfg.paths.save_dir, self.cfg.run_name)
+        self.resume_path = resolve_resume_checkpoint(getattr(self.cfg.paths, "resume_from", None))
 
     def log_metrics(
         self,
@@ -289,7 +260,7 @@ class BaseTrainer(ABC):
                 # Handle Python native types (int, float)
                 # Note: numpy.float64 is a subclass of float, but has dtype attribute
                 # numpy.int64 is NOT a subclass of int, and has dtype attribute
-                elif isinstance(value, (int, float)) and not hasattr(value, "dtype"):
+                elif isinstance(value, (int, float)) and not hasattr(value, "dtype"):  # noqa: UP038
                     scalar_items[key] = float(value)
                 # Handle numpy scalars (numpy.int64, numpy.float64, etc.)
                 # numpy scalars have .item() method and .dtype attribute
@@ -336,9 +307,7 @@ class BaseTrainer(ABC):
             project_dir=self.cfg.paths.save_dir,
             automatic_checkpoint_naming=False,  # Disable automatic checkpointing
         )
-        self.accelerator = build_accelerator(
-            self.cfg, gradient_accumulation_steps, accelerator_config
-        )
+        self.accelerator = build_accelerator(self.cfg, gradient_accumulation_steps, accelerator_config)
 
         # Global seeding
         set_seed(self.cfg.seed, device_specific=True)
@@ -388,9 +357,7 @@ class BaseTrainer(ABC):
             inference_dtype = torch.bfloat16
         return inference_dtype
 
-    def calculate_gradient_accumulation_steps(
-        self, num_train_timesteps: int
-    ) -> tuple[int, int]:
+    def calculate_gradient_accumulation_steps(self, num_train_timesteps: int) -> tuple[int, int]:
         """Calculate gradient accumulation steps.
 
         Args:
@@ -418,9 +385,7 @@ class BaseTrainer(ABC):
         """
         return list(range(num_train_timesteps))
 
-    def setup_optimizer(
-        self, parameters: list[torch.nn.Parameter], use_8bit: bool = False
-    ) -> torch.optim.Optimizer:
+    def setup_optimizer(self, parameters: list[torch.nn.Parameter], use_8bit: bool = False) -> torch.optim.Optimizer:
         """Setup optimizer for training.
 
         Args:
@@ -483,9 +448,7 @@ class BaseTrainer(ABC):
             if accelerator.is_main_process:
                 os.makedirs(ema_dir, exist_ok=True)
             accelerator.wait_for_everyone()
-            ema_path = os.path.join(
-                ema_dir, f"ema_state_rank{accelerator.process_index}.pt"
-            )
+            ema_path = os.path.join(ema_dir, f"ema_state_rank{accelerator.process_index}.pt")
             torch.save(self.ema.state_dict(), ema_path)
 
         # Apply EMA weights to model before saving (on all processes, before unwrap)
@@ -527,9 +490,7 @@ class BaseTrainer(ABC):
         try:
             if accelerator.is_main_process:
                 # Pass state_dict explicitly to avoid save_pretrained calling model.state_dict() again
-                base_transformer.save_pretrained(
-                    transformer_dir, state_dict=state_dict_to_save
-                )
+                base_transformer.save_pretrained(transformer_dir, state_dict=state_dict_to_save)
 
                 with open(os.path.join(save_root, "metadata.json"), "w") as f:
                     json.dump(metadata, f)
@@ -539,17 +500,13 @@ class BaseTrainer(ABC):
 
         # Clean up old checkpoints after successful save (only on main process)
         if (
-            accelerator.is_main_process
-            and cfg.num_checkpoint_limit is not None
-            and cfg.num_checkpoint_limit > 0
+            accelerator.is_main_process and cfg.num_checkpoint_limit is not None and cfg.num_checkpoint_limit > 0
         ) and os.path.exists(checkpoints_dir):
             # Get all checkpoint directories
             checkpoint_folders = []
             for item in os.listdir(checkpoints_dir):
                 checkpoint_path = os.path.join(checkpoints_dir, item)
-                if os.path.isdir(checkpoint_path) and item.startswith(
-                    "checkpoint-"
-                ):
+                if os.path.isdir(checkpoint_path) and item.startswith("checkpoint-"):
                     # Extract step number from folder name (e.g., "checkpoint-120" -> 120)
                     match = re.search(r"checkpoint-(\d+)", item)
                     if match:
@@ -570,9 +527,7 @@ class BaseTrainer(ABC):
         # Final synchronization: ensure all processes complete all save operations before returning
         accelerator.wait_for_everyone()
 
-    def resume_from_checkpoint(
-        self, accelerator: Accelerator
-    ) -> tuple[int, int, int | None]:
+    def resume_from_checkpoint(self, accelerator: Accelerator) -> tuple[int, int, int | None]:
         """Resume training from checkpoint.
 
         Args:
@@ -608,9 +563,7 @@ class BaseTrainer(ABC):
                     f"ema_state_rank{accelerator.process_index}.pt",
                 )
                 if os.path.exists(ema_state_path):
-                    ema_state = torch.load(
-                        ema_state_path, map_location=accelerator.device
-                    )
+                    ema_state = torch.load(ema_state_path, map_location=accelerator.device)
                     self.ema.load_state_dict(ema_state)
                     self.ema.to(accelerator.device)
                 else:

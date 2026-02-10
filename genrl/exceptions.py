@@ -5,7 +5,5 @@ class ConfigurationError(ValueError):
     """Raised when configuration is invalid."""
 
 
-
 class TrainingError(RuntimeError):
     """Raised when training encounters an error."""
-

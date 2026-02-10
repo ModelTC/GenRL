@@ -62,9 +62,7 @@ def wan_eval_once(
         ema.copy_ema_to(transformer_params, store_temp=True)
     all_rewards = defaultdict(list)
     last_batch = None
-    eval_guidance = (
-        getattr(cfg.sample, "eval_guidance_scale", None) or cfg.sample.guidance_scale
-    )
+    eval_guidance = getattr(cfg.sample, "eval_guidance_scale", None) or cfg.sample.guidance_scale
     for test_batch in tqdm(
         test_dataloader,
         desc="Eval",
@@ -103,16 +101,10 @@ def wan_eval_once(
                 # don't need sde_window_size and sde_window_range
                 # because we are not training
             )
-        rewards_eval, reward_meta = eval_reward_fn(
-            videos_eval, test_prompts, test_metadata, False
-        )
+        rewards_eval, reward_meta = eval_reward_fn(videos_eval, test_prompts, test_metadata, False)
         last_batch = (videos_eval, test_prompts, rewards_eval, reward_meta)
         for key, value in rewards_eval.items():
-            gathered = (
-                accelerator.gather(torch.as_tensor(value, device=accelerator.device))
-                .cpu()
-                .numpy()
-            )
+            gathered = accelerator.gather(torch.as_tensor(value, device=accelerator.device)).cpu().numpy()
             all_rewards[key].append(gathered)
 
     # concat and log
@@ -120,11 +112,7 @@ def wan_eval_once(
     if accelerator.is_main_process:
         # Only log raw scores (ending with '_raw')
         raw_keys = [k for k in all_rewards if k.endswith("_raw")]
-        metrics = {
-            f"eval_reward_{k}": float(np.mean(v))
-            for k, v in all_rewards.items()
-            if k in raw_keys
-        }
+        metrics = {f"eval_reward_{k}": float(np.mean(v)) for k, v in all_rewards.items() if k in raw_keys}
         if log_metrics is not None:
             # Use the shared logging helper (will also print to stdout)
             log_metrics(accelerator, metrics, global_step)

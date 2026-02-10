@@ -33,9 +33,7 @@ class AccelerateConfig:
 @dataclass
 class TrainConfig:
     batch_size: int = 8
-    gradient_accumulation_steps: int | None = (
-        None  # if None, derive from sample settings
-    )
+    gradient_accumulation_steps: int | None = None  # if None, derive from sample settings
     num_inner_epochs: int = 1
     timestep_fraction: float = 0.99
     beta: float = 0.0
@@ -156,30 +154,15 @@ def load_config(path: str) -> Config:
             if field_name in src:
                 val = src[field_name]
                 # dispatch based on nested dataclass types
-                if (
-                    isinstance(field_def.default, FSDPConfig)
-                    or field_def.type == FSDPConfig
-                ):
+                if isinstance(field_def.default, FSDPConfig) or field_def.type == FSDPConfig:
                     kwargs[field_name] = build_dataclass(FSDPConfig, val)
-                elif (
-                    isinstance(field_def.default, AccelerateConfig)
-                    or field_def.type == AccelerateConfig
-                ):
+                elif isinstance(field_def.default, AccelerateConfig) or field_def.type == AccelerateConfig:
                     kwargs[field_name] = build_dataclass(AccelerateConfig, val)
-                elif (
-                    isinstance(field_def.default, TrainConfig)
-                    or field_def.type == TrainConfig
-                ):
+                elif isinstance(field_def.default, TrainConfig) or field_def.type == TrainConfig:
                     kwargs[field_name] = build_dataclass(TrainConfig, val)
-                elif (
-                    isinstance(field_def.default, SampleConfig)
-                    or field_def.type == SampleConfig
-                ):
+                elif isinstance(field_def.default, SampleConfig) or field_def.type == SampleConfig:
                     kwargs[field_name] = build_dataclass(SampleConfig, val)
-                elif (
-                    isinstance(field_def.default, ProjectPaths)
-                    or field_def.type == ProjectPaths
-                ):
+                elif isinstance(field_def.default, ProjectPaths) or field_def.type == ProjectPaths:
                     kwargs[field_name] = build_dataclass(ProjectPaths, val)
                 else:
                     kwargs[field_name] = val

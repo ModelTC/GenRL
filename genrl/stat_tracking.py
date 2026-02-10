@@ -1,4 +1,3 @@
-
 import numpy as np
 import torch
 
@@ -71,12 +70,7 @@ class PerPromptStatTracker:
                 advantages[prompts == prompt] = prompt_rewards
             elif mode == "sft":
                 advantages[prompts == prompt] = (
-                    (
-                        torch.tensor(prompt_rewards)
-                        == torch.max(torch.tensor(prompt_rewards))
-                    )
-                    .float()
-                    .numpy()
+                    (torch.tensor(prompt_rewards) == torch.max(torch.tensor(prompt_rewards))).float().numpy()
                 )
             elif mode == "dpo":
                 prompt_advantages = torch.tensor(prompt_rewards)
@@ -97,11 +91,7 @@ class PerPromptStatTracker:
         Returns:
             Tuple of (avg_group_size, num_unique_prompts_seen).
         """
-        avg_group_size = (
-            sum(len(v) for v in self.stats.values()) / len(self.stats)
-            if self.stats
-            else 0
-        )
+        avg_group_size = sum(len(v) for v in self.stats.values()) / len(self.stats) if self.stats else 0
         history_prompts = len(self.history_prompts)
         return avg_group_size, history_prompts
 

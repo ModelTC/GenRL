@@ -82,9 +82,7 @@ class WanTrainer(BaseTrainer):
         if cfg.sample.sde_window_size and cfg.sample.sde_window_size > 0:
             num_train_timesteps = cfg.sample.sde_window_size
         else:
-            num_train_timesteps = int(
-                cfg.sample.num_steps * cfg.train.timestep_fraction
-            )
+            num_train_timesteps = int(cfg.sample.num_steps * cfg.train.timestep_fraction)
         (
             _base_gas,
             gradient_accumulation_steps,
@@ -114,9 +112,7 @@ class WanTrainer(BaseTrainer):
         self._prepare_models_with_accelerator(cfg, accelerator)
 
         # Resume from checkpoint if needed
-        first_epoch, global_step, resume_epoch_tag = self.resume_from_checkpoint(
-            accelerator
-        )
+        first_epoch, global_step, resume_epoch_tag = self.resume_from_checkpoint(accelerator)
 
         if resume_epoch_tag is not None:
             self.train_sampler.set_epoch(resume_epoch_tag)
@@ -184,14 +180,10 @@ class WanTrainer(BaseTrainer):
                 target_modules=cfg.train.lora_target_modules,
             )
             if cfg.train.lora_path:
-                pipeline.transformer = PeftModel.from_pretrained(
-                    pipeline.transformer, cfg.train.lora_path
-                )
+                pipeline.transformer = PeftModel.from_pretrained(pipeline.transformer, cfg.train.lora_path)
                 pipeline.transformer.set_adapter("default")
             else:
-                pipeline.transformer = get_peft_model(
-                    pipeline.transformer, transformer_lora_config
-                )
+                pipeline.transformer = get_peft_model(pipeline.transformer, transformer_lora_config)
 
         # Get transformer and collect trainable parameters
         transformer = pipeline.transformer
@@ -202,9 +194,7 @@ class WanTrainer(BaseTrainer):
 
         transformer_params = []
         for module in trainable_modules:
-            transformer_params.extend(
-                list(filter(lambda p: p.requires_grad, module.parameters()))
-            )
+            transformer_params.extend(list(filter(lambda p: p.requires_grad, module.parameters())))
 
         # Store ref_transformer for later use
         if ref_transformer is not None:
@@ -214,9 +204,7 @@ class WanTrainer(BaseTrainer):
         if cfg.allow_tf32:
             torch.backends.cuda.matmul.allow_tf32 = True
 
-        optimizer = self.setup_optimizer(
-            transformer_params, use_8bit=cfg.train.use_8bit_adam
-        )
+        optimizer = self.setup_optimizer(transformer_params, use_8bit=cfg.train.use_8bit_adam)
         self.optimizer = optimizer
         self.transformer_params = transformer_params
 
@@ -236,14 +224,8 @@ class WanTrainer(BaseTrainer):
         )
         self.reward_fn = reward_fn
 
-        eval_reward_cfg = (
-            cfg.eval_reward_fn if cfg.eval_reward_fn is not None else cfg.reward_fn
-        )
-        eval_reward_module = (
-            cfg.eval_reward_module
-            if cfg.eval_reward_module is not None
-            else cfg.reward_module
-        )
+        eval_reward_cfg = cfg.eval_reward_fn if cfg.eval_reward_fn is not None else cfg.reward_fn
+        eval_reward_module = cfg.eval_reward_module if cfg.eval_reward_module is not None else cfg.reward_module
         eval_reward_fn = multi_score(
             torch.device("cpu"),
             eval_reward_cfg,
@@ -259,9 +241,7 @@ class WanTrainer(BaseTrainer):
             cfg: Training config.
             accelerator: Accelerator instance.
         """
-        train_dataloader, test_dataloader, train_sampler = build_dataloaders(
-            cfg, accelerator
-        )
+        train_dataloader, test_dataloader, train_sampler = build_dataloaders(cfg, accelerator)
         self.train_dataloader = train_dataloader
         self.test_dataloader = test_dataloader
         self.train_sampler = train_sampler
@@ -355,9 +335,7 @@ class WanTrainer(BaseTrainer):
 
         # Prepare ref_transformer if it exists
         if hasattr(self, "ref_transformer") and self.ref_transformer is not None:
-            ref_transformer = accelerator.prepare_model(
-                self.ref_transformer, evaluation_mode=True
-            )
+            ref_transformer = accelerator.prepare_model(self.ref_transformer, evaluation_mode=True)
             ref_transformer.eval()
             self.pipeline.ref_transformer = ref_transformer
             self.ref_transformer = ref_transformer
@@ -389,32 +367,28 @@ class WanTrainer(BaseTrainer):
 
         # Ensure ref_transformer exists after resume
         # Always reload from pretrained_model to ensure it uses original weights
-        if self.full_finetune and cfg.train.beta > 0 and (
-            self.ref_transformer is None
-            or not hasattr(self.pipeline, "ref_transformer")
-            or self.pipeline.ref_transformer is None
+        if (
+            self.full_finetune
+            and cfg.train.beta > 0
+            and (
+                self.ref_transformer is None
+                or not hasattr(self.pipeline, "ref_transformer")
+                or self.pipeline.ref_transformer is None
+            )
         ):
             if accelerator.is_main_process:
-                logger.info(
-                    f"Loading ref_transformer from pretrained_model: {cfg.paths.pretrained_model}"
-                )
+                logger.info(f"Loading ref_transformer from pretrained_model: {cfg.paths.pretrained_model}")
             # Reload ref_transformer from pretrained_model path
             with fast_init(accelerator.device, init_weights=False):
-                ref_pipeline = WanPipeline.from_pretrained(
-                    cfg.paths.pretrained_model
-                )
+                ref_pipeline = WanPipeline.from_pretrained(cfg.paths.pretrained_model)
             ref_transformer = ref_pipeline.transformer
             ref_transformer.requires_grad_(False)
-            ref_transformer = accelerator.prepare_model(
-                ref_transformer, evaluation_mode=True
-            )
+            ref_transformer = accelerator.prepare_model(ref_transformer, evaluation_mode=True)
             ref_transformer.eval()
             self.pipeline.ref_transformer = ref_transformer
             self.ref_transformer = ref_transformer
 
-    def _run_training_loop(
-        self, cfg: Config, accelerator: Accelerator, first_epoch: int, global_step: int
-    ):
+    def _run_training_loop(self, cfg: Config, accelerator: Accelerator, first_epoch: int, global_step: int):
         """Run the main training loop.
 
         Args:
@@ -425,15 +399,9 @@ class WanTrainer(BaseTrainer):
         """
         resume_path = self.resume_path
 
-        samples_per_epoch = (
-            cfg.sample.batch_size
-            * accelerator.num_processes
-            * cfg.sample.num_batches_per_epoch
-        )
+        samples_per_epoch = cfg.sample.batch_size * accelerator.num_processes * cfg.sample.num_batches_per_epoch
         total_train_batch_size = (
-            cfg.train.batch_size
-            * accelerator.num_processes
-            * cfg.train.gradient_accumulation_steps
+            cfg.train.batch_size * accelerator.num_processes * cfg.train.gradient_accumulation_steps
         )
 
         if accelerator.is_main_process:
@@ -462,11 +430,7 @@ class WanTrainer(BaseTrainer):
                 and (epoch > 0 or cfg.initial_eval)
                 and not (resume_path and epoch == first_epoch)
             ):
-                eval_reward_cfg = (
-                    cfg.eval_reward_fn
-                    if cfg.eval_reward_fn is not None
-                    else cfg.reward_fn
-                )
+                eval_reward_cfg = cfg.eval_reward_fn if cfg.eval_reward_fn is not None else cfg.reward_fn
                 with reward_models_on_device(eval_reward_cfg, accelerator.device):
                     wan_eval_once(
                         cfg,
@@ -490,9 +454,7 @@ class WanTrainer(BaseTrainer):
             if (
                 epoch % cfg.save_freq == 0
                 and epoch > 0
-                and not (
-                    resume_path and epoch == first_epoch
-                )  # don't save on the resume epoch
+                and not (resume_path and epoch == first_epoch)  # don't save on the resume epoch
             ):
                 current_epoch_tag = epoch * cfg.sample.num_batches_per_epoch
                 self.save_checkpoint(
@@ -528,35 +490,22 @@ class WanTrainer(BaseTrainer):
                 # Use deterministic generator for reproducibility
                 # Seed based on epoch and inner_epoch to ensure consistency across runs
                 generator = torch.Generator(device=accelerator.device)
-                generator.manual_seed(
-                    cfg.seed + epoch * SEED_EPOCH_STRIDE + inner_epoch
-                )
-                perm = torch.randperm(
-                    total_batch_size, device=accelerator.device, generator=generator
-                )
+                generator.manual_seed(cfg.seed + epoch * SEED_EPOCH_STRIDE + inner_epoch)
+                perm = torch.randperm(total_batch_size, device=accelerator.device, generator=generator)
                 samples = {k: v[perm] for k, v in samples.items()}
                 perms = torch.stack(
-                    [
-                        torch.arange(num_timesteps, device=accelerator.device)
-                        for _ in range(total_batch_size)
-                    ]
+                    [torch.arange(num_timesteps, device=accelerator.device) for _ in range(total_batch_size)]
                 )
                 for key in ["timesteps", "latents", "next_latents", "log_probs"]:
                     samples[key] = samples[key][
-                        torch.arange(total_batch_size, device=accelerator.device)[
-                            :, None
-                        ],
+                        torch.arange(total_batch_size, device=accelerator.device)[:, None],
                         perms,
                     ]
 
                 micoe_batch = total_batch_size // cfg.sample.num_batches_per_epoch
-                samples_batched = {
-                    k: v.reshape(-1, micoe_batch, *v.shape[1:])
-                    for k, v in samples.items()
-                }
+                samples_batched = {k: v.reshape(-1, micoe_batch, *v.shape[1:]) for k, v in samples.items()}
                 samples_batched = [
-                    dict(zip(samples_batched, x, strict=False))
-                    for x in zip(*samples_batched.values(), strict=False)
+                    dict(zip(samples_batched, x, strict=False)) for x in zip(*samples_batched.values(), strict=False)
                 ]
 
                 self.pipeline.transformer.train()
@@ -569,9 +518,7 @@ class WanTrainer(BaseTrainer):
                 ):
                     if cfg.train.cfg:
                         embeds = sample["prompt_embeds"]
-                        negative_embeds = self.train_neg_prompt_embeds[
-                            : len(sample["prompt_embeds"])
-                        ]
+                        negative_embeds = self.train_neg_prompt_embeds[: len(sample["prompt_embeds"])]
                     else:
                         embeds = sample["prompt_embeds"]
                         negative_embeds = None
@@ -596,9 +543,7 @@ class WanTrainer(BaseTrainer):
                                 ref_model = self.ref_transformer
                                 if ref_model is None:
                                     msg = "full_finetune with beta>0 requires a ref_transformer."
-                                    raise ValueError(
-                                        msg
-                                    )
+                                    raise ValueError(msg)
                                 ref_model.eval()
                                 with torch.no_grad():
                                     (
@@ -674,16 +619,11 @@ class WanTrainer(BaseTrainer):
                                 1.0 - cfg.train.clip_range,
                                 1.0 + cfg.train.clip_range,
                             )
-                            policy_loss = torch.mean(
-                                torch.maximum(unclipped_loss, clipped_loss)
-                            )
+                            policy_loss = torch.mean(torch.maximum(unclipped_loss, clipped_loss))
 
                             reweight_scale = 1.0
                             reweight_scale_kl = 1.0
-                            if (
-                                cfg.train.loss_reweighting == "longcat"
-                                and cfg.sample.sde_type == "flow_sde"
-                            ):
+                            if cfg.train.loss_reweighting == "longcat" and cfg.sample.sde_type == "flow_sde":
                                 reweight_scale = (
                                     torch.sqrt(
                                         sigma
@@ -713,39 +653,21 @@ class WanTrainer(BaseTrainer):
                                     kl_denom = 1 / 2
                                 else:
                                     msg = f"Unknown sde_type: {cfg.sample.sde_type}. Must be 'flow_sde' or 'flow_cps'."
-                                    raise ValueError(
-                                        msg
-                                    )
-                                kl_loss = (
-                                    (prev_sample_mean - prev_sample_mean_ref) ** 2
-                                ).mean(dim=(1, 2, 3), keepdim=True) / (2 * kl_denom)
+                                    raise ValueError(msg)
+                                kl_loss = ((prev_sample_mean - prev_sample_mean_ref) ** 2).mean(
+                                    dim=(1, 2, 3), keepdim=True
+                                ) / (2 * kl_denom)
                                 kl_loss = torch.mean(kl_loss)
-                                loss = (
-                                    reweight_scale * policy_loss
-                                    + cfg.train.beta * kl_loss * reweight_scale_kl
-                                )
+                                loss = reweight_scale * policy_loss + cfg.train.beta * kl_loss * reweight_scale_kl
                             else:
                                 loss = reweight_scale * policy_loss
 
-                            info["approx_kl"].append(
-                                0.5
-                                * torch.mean(
-                                    (log_prob - sample["log_probs"][:, j]) ** 2
-                                )
-                            )
+                            info["approx_kl"].append(0.5 * torch.mean((log_prob - sample["log_probs"][:, j]) ** 2))
                             info["clip_frac"].append(
-                                torch.mean(
-                                    (
-                                        torch.abs(ratio - 1.0) > cfg.train.clip_range
-                                    ).float()
-                                )
+                                torch.mean((torch.abs(ratio - 1.0) > cfg.train.clip_range).float())
                             )
-                            info["clip_frac_gt_one"].append(
-                                torch.mean((ratio - 1.0 > cfg.train.clip_range).float())
-                            )
-                            info["clip_frac_lt_one"].append(
-                                torch.mean((1.0 - ratio > cfg.train.clip_range).float())
-                            )
+                            info["clip_frac_gt_one"].append(torch.mean((ratio - 1.0 > cfg.train.clip_range).float()))
+                            info["clip_frac_lt_one"].append(torch.mean((1.0 - ratio > cfg.train.clip_range).float()))
                             info["policy_loss"].append(policy_loss)
                             if cfg.train.beta > 0:
                                 info["kl_loss"].append(kl_loss)
@@ -760,9 +682,7 @@ class WanTrainer(BaseTrainer):
                             self.optimizer.step()
                             self.optimizer.zero_grad()
                         if accelerator.sync_gradients:
-                            info = {
-                                k: torch.mean(torch.stack(v)) for k, v in info.items()
-                            }
+                            info = {k: torch.mean(torch.stack(v)) for k, v in info.items()}
                             info = accelerator.reduce(info, reduction="mean")
                             info.update({"epoch": epoch, "inner_epoch": inner_epoch})
                             # Log to trackers and to stdout (scalar-only), with caller context
@@ -804,9 +724,7 @@ class WanTrainer(BaseTrainer):
         try:
             if accelerator.is_main_process:
                 # Pass state_dict explicitly to avoid save_pretrained calling model.state_dict() again
-                base_transformer.save_pretrained(
-                    final_model_dir, state_dict=state_dict_to_save
-                )
+                base_transformer.save_pretrained(final_model_dir, state_dict=state_dict_to_save)
                 logger.info(f"Final model saved to {final_model_dir}")
         finally:
             if cfg.train.ema:
@@ -836,19 +754,14 @@ class WanTrainer(BaseTrainer):
             k: (
                 torch.cat([s[k] for s in samples], dim=0)
                 if not isinstance(samples[0][k], dict)
-                else {
-                    sub_key: torch.cat([s[k][sub_key] for s in samples], dim=0)
-                    for sub_key in samples[0][k]
-                }
+                else {sub_key: torch.cat([s[k][sub_key] for s in samples], dim=0) for sub_key in samples[0][k]}
             )
             for k in samples[0]
         }
 
         samples["rewards"]["ori_avg"] = samples["rewards"]["avg"]
         # Apply KL penalty only to avg (raw scores remain unchanged)
-        kl_penalty = (
-            cfg.sample.kl_reward * samples["kl"]
-        )  # Shape: (batch_size, num_timesteps)
+        kl_penalty = cfg.sample.kl_reward * samples["kl"]  # Shape: (batch_size, num_timesteps)
         samples["rewards"]["avg"] = samples["rewards"]["avg"].unsqueeze(-1) - kl_penalty
 
         # Save original raw rewards and broadcast them to (batch_size, num_timesteps)
@@ -856,38 +769,20 @@ class WanTrainer(BaseTrainer):
         for reward_name in cfg.reward_fn:
             raw_reward_key = f"{reward_name}_raw"
             # Save original raw reward
-            samples["rewards"][f"ori_{raw_reward_key}"] = samples["rewards"][
-                raw_reward_key
-            ]
+            samples["rewards"][f"ori_{raw_reward_key}"] = samples["rewards"][raw_reward_key]
             # Broadcast raw reward from (batch_size,) to (batch_size, num_timesteps)
             samples["rewards"][raw_reward_key] = (
-                samples["rewards"][raw_reward_key]
-                .unsqueeze(-1)
-                .expand(-1, num_timesteps)
+                samples["rewards"][raw_reward_key].unsqueeze(-1).expand(-1, num_timesteps)
             )
 
-        gathered_rewards = {
-            key: accelerator.gather(value) for key, value in samples["rewards"].items()
-        }
-        gathered_rewards = {
-            key: value.cpu().numpy() for key, value in gathered_rewards.items()
-        }
+        gathered_rewards = {key: accelerator.gather(value) for key, value in samples["rewards"].items()}
+        gathered_rewards = {key: value.cpu().numpy() for key, value in gathered_rewards.items()}
         # Gather KL for advantage calculation in weight_advantages mode
-        gathered_kl = (
-            accelerator.gather(samples["kl"]).cpu().numpy()
-        )  # Shape: (total_batch_size, num_timesteps)
+        gathered_kl = accelerator.gather(samples["kl"]).cpu().numpy()  # Shape: (total_batch_size, num_timesteps)
 
         # log rewards and KL - only log raw scores
-        raw_keys = [
-            k
-            for k in gathered_rewards
-            if k.endswith("_raw") and not k.startswith("ori_")
-        ]
-        reward_logs = {
-            f"reward_{key}": value.mean()
-            for key, value in gathered_rewards.items()
-            if key in raw_keys
-        }
+        raw_keys = [k for k in gathered_rewards if k.endswith("_raw") and not k.startswith("ori_")]
+        reward_logs = {f"reward_{key}": value.mean() for key, value in gathered_rewards.items() if key in raw_keys}
         kl_mean = float(gathered_kl.mean())
         kl_abs = float(np.abs(gathered_kl).mean())
         self.log_metrics(
@@ -911,15 +806,11 @@ class WanTrainer(BaseTrainer):
             gathered_kl=gathered_kl,
             stat_tracker=self.stat_tracker if cfg.per_prompt_stat_tracking else None,
             reward_stat_trackers=(
-                self.reward_stat_trackers
-                if cfg.train.weight_advantages and cfg.per_prompt_stat_tracking
-                else None
+                self.reward_stat_trackers if cfg.train.weight_advantages and cfg.per_prompt_stat_tracking else None
             ),
             kl_stat_tracker=(
                 self.kl_stat_tracker
-                if cfg.train.weight_advantages
-                and cfg.per_prompt_stat_tracking
-                and cfg.sample.kl_reward > 0
+                if cfg.train.weight_advantages and cfg.per_prompt_stat_tracking and cfg.sample.kl_reward > 0
                 else None
             ),
         )
@@ -929,9 +820,9 @@ class WanTrainer(BaseTrainer):
             self.log_metrics(accelerator, advantage_log_dict, global_step)
 
         advantages = torch.as_tensor(advantages)
-        samples["advantages"] = advantages.reshape(
-            accelerator.num_processes, -1, advantages.shape[-1]
-        )[accelerator.process_index].to(accelerator.device)
+        samples["advantages"] = advantages.reshape(accelerator.num_processes, -1, advantages.shape[-1])[
+            accelerator.process_index
+        ].to(accelerator.device)
         del samples["rewards"]
         del samples["prompt_ids"]
 
@@ -949,14 +840,12 @@ class WanTrainer(BaseTrainer):
                 # Seed based on epoch to ensure consistency across runs
                 generator = torch.Generator(device=accelerator.device)
                 generator.manual_seed(cfg.seed + epoch)
-                random_indices = torch.randperm(
-                    len(false_indices), device=accelerator.device, generator=generator
-                )[:num_to_change]
+                random_indices = torch.randperm(len(false_indices), device=accelerator.device, generator=generator)[
+                    :num_to_change
+                ]
                 mask[false_indices[random_indices]] = True
         global_count = (
-            accelerator.gather(mask.sum()).sum().item()
-            if accelerator.num_processes > 1
-            else mask.sum().item()
+            accelerator.gather(mask.sum()).sum().item() if accelerator.num_processes > 1 else mask.sum().item()
         )
         actual_batch_size = global_count / (num_batches * accelerator.num_processes)
         self.log_metrics(

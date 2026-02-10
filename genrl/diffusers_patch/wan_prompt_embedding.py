@@ -1,4 +1,3 @@
-
 import torch
 
 
@@ -26,23 +25,17 @@ def _get_t5_prompt_embeds(
     text_input_ids, mask = text_inputs.input_ids, text_inputs.attention_mask
     seq_lens = mask.gt(0).sum(dim=1).long()
 
-    prompt_embeds = text_encoder(
-        text_input_ids.to(device), mask.to(device)
-    ).last_hidden_state
+    prompt_embeds = text_encoder(text_input_ids.to(device), mask.to(device)).last_hidden_state
     prompt_embeds = prompt_embeds.to(dtype=dtype, device=device)
     prompt_embeds = [u[:v] for u, v in zip(prompt_embeds, seq_lens, strict=False)]
     prompt_embeds = torch.stack(
-        [
-            torch.cat([u, u.new_zeros(max_sequence_length - u.size(0), u.size(1))])
-            for u in prompt_embeds
-        ],
+        [torch.cat([u, u.new_zeros(max_sequence_length - u.size(0), u.size(1))]) for u in prompt_embeds],
         dim=0,
     )
 
     _, seq_len, _ = prompt_embeds.shape
     prompt_embeds = prompt_embeds.repeat(1, num_videos_per_prompt, 1)
     return prompt_embeds.view(batch_size * num_videos_per_prompt, seq_len, -1)
-
 
 
 def encode_prompt(
@@ -69,4 +62,3 @@ def encode_prompt(
         device=device,
         dtype=dtype,
     )
-

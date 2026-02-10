@@ -57,9 +57,7 @@ def wan_compute_log_prob(
             attention_kwargs=attention_kwargs,
             return_dict=False,
         )[0]
-        noise_pred = noise_pred_uncond + cfg.sample.guidance_scale * (
-            noise_pred_text - noise_pred_uncond
-        )
+        noise_pred = noise_pred_uncond + cfg.sample.guidance_scale * (noise_pred_text - noise_pred_uncond)
     else:
         noise_pred = transformer(
             hidden_states=sample["latents"][:, j],

@@ -128,11 +128,7 @@ def wan_sample_epoch(
                     diffusion_clip=cfg.sample.diffusion_clip,
                     diffusion_clip_value=cfg.sample.diffusion_clip_value,
                     sde_window_size=cfg.sample.sde_window_size or 0,
-                    sde_window_range=(
-                        tuple(cfg.sample.sde_window_range)
-                        if cfg.sample.sde_window_range
-                        else None
-                    ),
+                    sde_window_range=(tuple(cfg.sample.sde_window_range) if cfg.sample.sde_window_range else None),
                 )
 
             latents = torch.stack(latents, dim=1)
@@ -141,15 +137,9 @@ def wan_sample_epoch(
             kl = kls.detach()
 
             # Use timesteps from pipeline (window-aware) instead of all timesteps
-            timesteps = (
-                torch.stack(timesteps_list)
-                .unsqueeze(0)
-                .repeat(cfg.sample.batch_size, 1)
-            )
+            timesteps = torch.stack(timesteps_list).unsqueeze(0).repeat(cfg.sample.batch_size, 1)
 
-            rewards_future = executor.submit(
-                reward_fn, videos, prompts, prompt_metadata, True
-            )
+            rewards_future = executor.submit(reward_fn, videos, prompts, prompt_metadata, True)
             time.sleep(0)
 
             if accelerator.is_main_process and len(train_video_cache) < 5:
@@ -183,8 +173,7 @@ def wan_sample_epoch(
     ):
         rewards, _ = sample["rewards"].result()
         sample["rewards"] = {
-            key: torch.as_tensor(value, device=accelerator.device).float()
-            for key, value in rewards.items()
+            key: torch.as_tensor(value, device=accelerator.device).float() for key, value in rewards.items()
         }
 
     if accelerator.is_main_process and train_video_cache and epoch % 10 == 0:

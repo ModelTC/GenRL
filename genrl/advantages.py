@@ -94,9 +94,7 @@ def compute_advantages(
                 )
                 raise ConfigurationError(msg)
             prompt_ids = accelerator.gather(samples["prompt_ids"]).cpu().numpy()
-            prompts = pipeline.tokenizer.batch_decode(
-                prompt_ids, skip_special_tokens=True
-            )
+            prompts = pipeline.tokenizer.batch_decode(prompt_ids, skip_special_tokens=True)
 
             # Compute advantages for each raw reward separately
             weighted_advantages_list = []
@@ -119,9 +117,7 @@ def compute_advantages(
                         "per_prompt_stat_tracking=True, and kl_reward > 0"
                     )
                     raise ConfigurationError(msg)
-                kl_advantages = _compute_kl_advantages(
-                    gathered_kl, kl_stat_tracker, prompts, use_per_prompt=True
-                )
+                kl_advantages = _compute_kl_advantages(gathered_kl, kl_stat_tracker, prompts, use_per_prompt=True)
                 # Subtract KL advantages with kl_reward as weight
                 # kl_advantages is already negative (because KL is a penalty),
                 # so we directly multiply by kl_reward to get a negative contribution
@@ -131,22 +127,16 @@ def compute_advantages(
             advantages = sum(weighted_advantages_list)
 
             if accelerator.is_local_main_process:
-                logger.info(
-                    f"len(prompts) {len(prompts)} | len unique {len(set(prompts))}"
-                )
+                logger.info(f"len(prompts) {len(prompts)} | len unique {len(set(prompts))}")
             # Use the first stat_tracker for logging
             first_reward_name = next(iter(cfg.reward_fn))
-            group_size, trained_prompt_num = reward_stat_trackers[
-                first_reward_name
-            ].get_stats()
+            group_size, trained_prompt_num = reward_stat_trackers[first_reward_name].get_stats()
             # Calculate zero_std_ratio for each raw reward
             zero_std_ratios = {}
             for reward_name in cfg.reward_fn:
                 raw_reward_key = f"{reward_name}_raw"
-                zero_std_ratios[f"zero_std_ratio_{reward_name}"] = (
-                    calculate_zero_std_ratio(
-                        prompts, gathered_rewards, reward_key=f"ori_{raw_reward_key}"
-                    )
+                zero_std_ratios[f"zero_std_ratio_{reward_name}"] = calculate_zero_std_ratio(
+                    prompts, gathered_rewards, reward_key=f"ori_{raw_reward_key}"
                 )
             log_dict = {
                 "group_size": group_size,
@@ -164,9 +154,7 @@ def compute_advantages(
             weighted_advantages_list = []
             for reward_name in cfg.reward_fn:
                 raw_reward_key = f"{reward_name}_raw"
-                raw_rewards = gathered_rewards[
-                    raw_reward_key
-                ]  # Shape: (total_batch_size, num_timesteps)
+                raw_rewards = gathered_rewards[raw_reward_key]  # Shape: (total_batch_size, num_timesteps)
                 # Direct normalization on full shape
                 reward_advantages = _normalize_rewards(raw_rewards)
                 # Weight the advantages
@@ -175,9 +163,7 @@ def compute_advantages(
 
             # Handle KL as a reward: compute advantage for KL, then subtract with kl_reward weight
             if cfg.sample.kl_reward > 0:
-                kl_advantages = _compute_kl_advantages(
-                    gathered_kl, None, None, use_per_prompt=False
-                )
+                kl_advantages = _compute_kl_advantages(gathered_kl, None, None, use_per_prompt=False)
                 # Subtract KL advantages with kl_reward as weight
                 # kl_advantages is already negative (because KL is a penalty),
                 # so we directly multiply by kl_reward to get a negative contribution
@@ -191,14 +177,10 @@ def compute_advantages(
             msg = "stat_tracker must be provided when per_prompt_stat_tracking=True"
             raise ConfigurationError(msg)
         prompt_ids = accelerator.gather(samples["prompt_ids"]).cpu().numpy()
-        prompts = pipeline.tokenizer.batch_decode(
-            prompt_ids, skip_special_tokens=True
-        )
+        prompts = pipeline.tokenizer.batch_decode(prompt_ids, skip_special_tokens=True)
         advantages = stat_tracker.update(prompts, gathered_rewards["avg"])
         if accelerator.is_local_main_process:
-            logger.info(
-                f"len(prompts) {len(prompts)} | len unique {len(set(prompts))}"
-            )
+            logger.info(f"len(prompts) {len(prompts)} | len unique {len(set(prompts))}")
         group_size, trained_prompt_num = stat_tracker.get_stats()
         zero_std_ratio = calculate_zero_std_ratio(prompts, gathered_rewards)
         log_dict = {
