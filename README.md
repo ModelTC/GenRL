@@ -3,7 +3,7 @@
 <table>
   <tr>
     <td>
-      <img src="assets/logo.webp" alt="GenRL Logo" width="80">
+      <img src="assets/logo.webp" alt="GenRL Logo" width="100">
     </td>
     <td style="padding-left: 12px; text-align: left;">
       <h1 style="margin-bottom: 4px;"> <i>Gen</i>RL</h1>
