@@ -28,7 +28,7 @@ paths:
   save_dir: logs/longcat
   dataset: datasets/filtered_prompts
   pretrained_model: /data/models/Wan2.1-T2V-1.3B-Diffusers
-  resume_from: null
+  resume_from: /data/VideoGRPO/logs/longcat/wan_2_1_t2v_1_3b_longcat_2026.02.02_03.34.33/checkpoints/checkpoint-1700
 sample:
   batch_size: 4
   eval_batch_size: 2

@@ -1,80 +1,328 @@
-# VideoGRPO
+<div align="center">
 
-## Environment
-1. Python 3.10+ (use an isolated virtualenv/conda env).
-2. Install base deps:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Initialize and update submodules (for `videoalign_mq` and `videoalign_ta` rewards, etc):
-   ```bash
-   git submodule update --init --recursive
-   ```
-4. Setup VideoAlign checkpoints (required for `videoalign_mq` and `videoalign_ta` rewards):
-   ```bash
-   cd video_grpo/reward/VideoAlign/checkpoints
-   git lfs install
-   git clone https://huggingface.co/KwaiVGI/VideoReward
-   # Move all files from VideoReward to checkpoints directory
-   mv VideoReward/* .
-   mv VideoReward/.* . 2>/dev/null || true  # Move hidden files, ignore errors if none exist
-   # Remove the empty VideoReward directory
-   rm -rf VideoReward
-   cd ../../../..  # Return to project root
-   ```
-5. OCR extras (for `video_ocr` reward):
-   ```bash
-   # pre-download OCR model
-   python -c "from paddleocr import PaddleOCR; ocr = PaddleOCR(use_angle_cls=False, lang='en', use_gpu=False, show_log=False)"
-   ```
-6. Setup HPSv3 requirements (required for `hpsv3_general` and `hpsv3_percentile` rewards):
-   ```bash
-   pip install flash-attn==2.7.4.post1 --no-build-isolation
-   ```
+<table>
+  <tr>
+    <td>
+      <img src="assets/logo.webp" alt="GenRL Logo" width="80">
+    </td>
+    <td style="padding-left: 12px; text-align: left;">
+      <h1 style="margin-bottom: 4px;"> <i>Gen</i>RL</h1>
+      <h3 style="margin-top: 0;">Reinforcement Learning Framework for Visual Generation</h3>
+    </td>
+  </tr>
+</table>
 
-## Run
-Single node example (default `config/default.yaml`, LoRA + FSDP):
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![PyTorch 2.6](https://img.shields.io/badge/pytorch-2.6-ee4c2c.svg)](https://pytorch.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+<!-- [![arXiv](https://img.shields.io/badge/arXiv-xxxx.xxxxx-b31b1b.svg)](https://arxiv.org/abs/xxxx.xxxxx) -->
+
+<!-- TODO: Add a teaser image / GIF here -->
+<!-- <img src="assets/teaser.png" width="800"> -->
+
+**GenRL** is a scalable, modular reinforcement learning framework for optimizing visual generation models — from images to videos — with plug-and-play reward functions, multi-GPU distributed training, and first-class support for diffusion & flow-based generators.
+
+[🚀 Getting Started](#-getting-started) · [📖 Algorithms](#-supported-algorithms) · [📊 Performance](#-performance) · [🏗️ Architecture](#️-architecture)
+
+</div>
+
+---
+
+## ✨ Highlights
+
+- 🎯 **Unified RL for Visual Generation** — A single framework covering text-to-image (T2I), text-to-video (T2V), and image-to-video (I2V) generation
+- 🔄 **Multi-Paradigm Support** — Native support for both **Diffusion** and **Rectified Flow** generation paradigms via unified SDE formulation
+- 🧩 **Modular Reward System** — Plug-and-play reward functions: aesthetic scores, text-alignment, motion quality, OCR accuracy, and custom user-defined rewards
+- ⚡ **Scalable & Efficient** — Multi-node FSDP training with activation checkpointing, LoRA / full fine-tune, EMA, 8-bit Adam, and memory-efficient reward model offloading
+- 🎛️ **YAML-Driven Configuration** — Everything from model choice, reward weights, training schedule to FSDP sharding strategy is controlled via a single YAML config
+- 🔬 **Reproducible by Design** — Deterministic seeding across sampling, training, and logging for bit-exact experiment reproduction
+
+---
+
+## 📖 Supported Algorithms
+
+<!-- TODO: Add / update algorithm entries as they are implemented -->
+
+| Algorithm | Type | Status | Description |
+|-----------|------|--------|-------------|
+| **GRPO** | Policy Gradient | ✅ Supported | Group Relative Policy Optimization — compute advantages per-group with optional per-prompt stat tracking |
+| <!-- algo_2 --> | <!-- type --> | 🚧 Coming Soon | <!-- description --> |
+| <!-- algo_3 --> | <!-- type --> | 🚧 Coming Soon | <!-- description --> |
+| <!-- algo_4 --> | <!-- type --> | 📋 Planned | <!-- description --> |
+
+> 💡 *GenRL is designed to be algorithm-agnostic. Adding a new RL algorithm only requires implementing a new trainer — everything else (rewards, data, logging) is reusable.*
+
+---
+
+## 🤖 Supported Models
+
+<!-- TODO: Add / update model entries -->
+
+| Model | Modality | Parameters | Status |
+|-------|----------|------------|--------|
+| [Wan2.1-T2V](https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B-Diffusers) | Text → Video | 1.3B | ✅ Supported |
+| <!-- model_2 --> | <!-- modality --> | <!-- params --> | 🚧 Coming Soon |
+| <!-- model_3 --> | <!-- modality --> | <!-- params --> | 📋 Planned |
+
+---
+
+## 🎁 Supported Reward Functions
+
+| Reward | Domain | Source | Description |
+|--------|--------|--------|-------------|
+| `video_ocr` | 📝 Text | Built-in | OCR accuracy reward — measures text rendering quality via PaddleOCR |
+| `hpsv3_general` | 🖼️ Aesthetics | [HPSv3](https://github.com/tgxs002/HPSv3) | Human Preference Score v3 — general aesthetic quality |
+| `hpsv3_percentile` | 🖼️ Aesthetics | [HPSv3](https://github.com/tgxs002/HPSv3) | HPSv3 percentile-based reward normalization |
+| `videoalign_mq` | 🎬 Motion | [VideoAlign](https://github.com/KwaiVGI/VideoAlign) | Video motion quality assessment |
+| `videoalign_ta` | 🎬 Alignment | [VideoAlign](https://github.com/KwaiVGI/VideoAlign) | Video text-alignment score |
+| **Custom** | 🔧 Any | User-defined | Bring your own reward via `reward_module` config |
+
+> 🔗 Multiple rewards can be **composed with configurable weights** — GenRL supports both *reward-weighted* and *advantage-weighted* composition modes.
+
+---
+
+## 📊 Performance
+
+<!-- TODO: Fill in actual numbers from your experiments -->
+
+### 🎬 Text-to-Video (Wan2.1-T2V 1.3B)
+
+| Method | HPSv3 ↑ | VideoAlign-MQ ↑ | VideoAlign-TA ↑ | Training Cost |
+|--------|---------|-----------------|-----------------|---------------|
+| Baseline (pretrained) | — | — | — | — |
+| GenRL-GRPO (LoRA) | — | — | — | — |
+| GenRL-GRPO (Full FT) | — | — | — | — |
+
+### 📝 Video OCR
+
+| Method | OCR Accuracy ↑ | Levenshtein Score ↑ | Training Cost |
+|--------|---------------|---------------------|---------------|
+| Baseline (pretrained) | — | — | — |
+| GenRL-GRPO (LoRA) | — | — | — |
+
+<!-- ### 🖼️ Text-to-Image -->
+<!-- TODO: Add T2I benchmarks when available -->
+
+> 📈 *Performance tables will be updated with results from ongoing experiments. Stay tuned!*
+
+---
+
+## 🚀 Getting Started
+
+### 📋 Prerequisites
+
+- Python 3.10+
+- CUDA 12.x + PyTorch 2.6
+- 8× A100/H100 GPUs (recommended for video training)
+
+### 1️⃣ Install Dependencies
+
 ```bash
-accelerate launch train.py --config config/default.yaml
+pip install -r requirements.txt
 ```
 
-## Directory Structure
+### 2️⃣ Initialize Submodules
 
-After training, the output directory structure is organized as follows:
+```bash
+git submodule update --init --recursive
+```
+
+### 3️⃣ Setup Reward Model Checkpoints
+
+<details>
+<summary>🎬 VideoAlign (for <code>videoalign_mq</code> / <code>videoalign_ta</code> rewards)</summary>
+
+```bash
+cd video_grpo/reward/VideoAlign/checkpoints
+git lfs install
+git clone https://huggingface.co/KwaiVGI/VideoReward
+mv VideoReward/* .
+mv VideoReward/.* . 2>/dev/null || true
+rm -rf VideoReward
+cd ../../../..
+```
+</details>
+
+<details>
+<summary>📝 PaddleOCR (for <code>video_ocr</code> reward)</summary>
+
+```bash
+python -c "from paddleocr import PaddleOCR; ocr = PaddleOCR(use_angle_cls=False, lang='en', use_gpu=False, show_log=False)"
+```
+</details>
+
+<details>
+<summary>🖼️ HPSv3 (for <code>hpsv3_general</code> / <code>hpsv3_percentile</code> rewards)</summary>
+
+```bash
+pip install flash-attn==2.7.4.post1 --no-build-isolation
+```
+</details>
+
+### 4️⃣ Launch Training
+
+```bash
+# Single node, 8 GPUs (LoRA + FSDP)
+accelerate launch train.py --config config/default.yaml
+
+# Multi-node (4 nodes × 8 GPUs)
+torchrun --nnodes=4 --nproc_per_node=8 \
+  --rdzv_backend=c10d \
+  --rdzv_endpoint=${MASTER_ADDR}:${MASTER_PORT} \
+  train.py --config config/longcat.yaml
+```
+
+---
+
+## 🏗️ Architecture
+
+```
+GenRL/
+├── 🚀 train.py                        # Entry point
+├── 📁 config/                          # YAML configs
+│   ├── default.yaml                    #   Default (OCR, single-node)
+│   └── longcat.yaml                    #   Multi-reward, multi-node
+├── 📁 video_grpo/
+│   ├── config.py                       # Config schema & loader
+│   ├── constants.py                    # Global constants
+│   ├── data.py                         # Dataset & dataloaders
+│   ├── rewards.py                      # Multi-reward composition
+│   ├── advantages.py                   # Advantage computation (GRPO)
+│   ├── stat_tracking.py                # Per-prompt stat tracking
+│   ├── ema.py                          # EMA wrapper
+│   ├── 📁 trainer/
+│   │   ├── base_trainer.py             #   Abstract base trainer
+│   │   ├── wan_trainer.py              #   Wan model trainer
+│   │   ├── sampling.py                 #   Sampling epoch logic
+│   │   ├── evaluation.py               #   Eval & video logging
+│   │   ├── diffusion.py                #   Log-prob computation
+│   │   └── embeddings.py               #   Text embedding utils
+│   ├── 📁 reward/
+│   │   ├── ocr.py                      #   OCR reward
+│   │   ├── hpsv3.py                    #   HPSv3 reward
+│   │   ├── videoalign.py               #   VideoAlign rewards
+│   │   ├── 📁 HPSv3/                   #   HPSv3 submodule
+│   │   └── 📁 VideoAlign/              #   VideoAlign submodule
+│   └── 📁 diffusers_patch/
+│       └── wan_pipeline_with_logprob.py  # SDE step with log-prob
+├── 📁 datasets/                        # Prompt datasets
+└── 📁 scripts/
+    └── launch.sh                       # Launch script
+```
+
+---
+
+## ⚙️ Configuration
+
+All training behavior is controlled by a single YAML file. Key sections:
+
+| Section | What it controls |
+|---------|-----------------|
+| `reward_fn` | Reward functions & weights (e.g., `video_ocr: 1.0`, `hpsv3_general: 1.0`) |
+| `sample` | Sampling: batch size, num steps, guidance scale, SDE type, noise level |
+| `train` | Training: learning rate, clip range, advantage clipping, LoRA rank, EMA |
+| `accelerate` | Distributed: FSDP, mixed precision, num GPUs/nodes |
+| `paths` | Model path, dataset path, save directory, resume checkpoint |
+
+<details>
+<summary>📄 Example config (<code>config/default.yaml</code>)</summary>
+
+```yaml
+run_name: my_experiment
+seed: 42
+num_epochs: 100000
+height: 240
+width: 416
+frames: 33
+
+reward_fn:
+  video_ocr: 1.0
+
+trainer: wan
+use_lora: true
+
+sample:
+  batch_size: 8
+  num_steps: 20
+  guidance_scale: 4.5
+  sde_type: flow_sde
+
+train:
+  learning_rate: 1.0e-4
+  clip_range: 1.0e-3
+  lora_r: 32
+  ema: true
+
+accelerate:
+  distributed_type: FSDP
+  mixed_precision: bf16
+  num_processes: 8
+```
+</details>
+
+---
+
+## 📂 Output Structure
 
 ```
 logs/
-└── video_ocr/
-    └── wan_flow_grpo_2026.01.12_21.48.08/    # Run directory (save_dir/run_name)
-        ├── checkpoints/                       # Training checkpoints
+└── <experiment>/
+    └── <run_name>_<timestamp>/
+        ├── 📁 checkpoints/                    # Periodic checkpoints
         │   └── checkpoint-{step}/
-        │       ├── ema/                       # EMA states (if enabled)
-        │       ├── unwrapped_model/
-        │       │   └── transformer/           # Unwrapped model weights
-        │       └── metadata.json              # Checkpoint metadata
-        ├── final_model/                       # Final model after training completes
-        │   └── transformer/                  # Final model weights
-        │       ├── adapter_config.json        # LoRA config (if using LoRA)
-        │       └── adapter_model.safetensors  # LoRA weights (if using LoRA)
-        │       # OR full transformer weights (if full finetune)
-        ├── eval_videos/                       # Evaluation videos
-        └── sample_videos/                     # Training sample videos
+        │       ├── ema/                        # EMA states
+        │       ├── unwrapped_model/transformer/ # Model weights
+        │       └── metadata.json               # Step & config metadata
+        ├── 📁 final_model/                    # Final trained model
+        │   └── transformer/
+        │       ├── adapter_config.json         # LoRA config (if LoRA)
+        │       └── adapter_model.safetensors   # LoRA weights (if LoRA)
+        ├── 📁 eval_videos/                    # Evaluation videos
+        └── 📁 sample_videos/                  # Training sample videos
 ```
 
-**Notes:**
-- The run directory name includes a timestamp: `{run_name}_{YYYY.MM.DD_HH.MM.SS}`
-- `checkpoints/` contains periodic checkpoints saved during training
-- `final_model/` contains the final trained model:
-  - For LoRA training: Only LoRA adapter weights are saved
-  - For full finetune: Complete transformer weights are saved
-- Videos are saved in `eval_videos/` and `sample_videos/` directories
+---
 
-## Notes
+## 🔑 Key Features at a Glance
 
-- All config is YAML-driven (`config/default.yaml`): FSDP, LoRA/full finetune, rewards, data paths, etc.
-- Train/eval rewards can differ via `reward_fn/reward_module` and `eval_reward_fn/eval_reward_module`.
-- All outputs (checkpoints, videos, final model) are saved under `paths.save_dir/run_name/`:
-  - Checkpoints: `paths.save_dir/run_name/checkpoints/checkpoint-{step}/`
-  - Videos: `paths.save_dir/run_name/eval_videos/` and `sample_videos/`
-  - Final model: `paths.save_dir/run_name/final_model/`
+| Feature | Details |
+|---------|---------|
+| 🎯 RL Algorithm | GRPO with per-prompt stat tracking & advantage clipping |
+| 🧬 SDE Types | `flow_sde`, `flow_cps` — unified SDE formulation for rectified flow |
+| 🪟 Windowed Training | `sde_window_size` / `sde_window_range` for timestep sub-sampling |
+| 📊 Reward Composition | Multi-reward weighted sum, advantage-weighted mode |
+| 🧮 KL Regularization | Optional KL reward to constrain policy drift |
+| 🎚️ Guidance | Configurable classifier-free guidance for sampling & evaluation |
+| 💾 Checkpointing | Periodic + final model saves with FSDP sharded state dict |
+| 📈 Logging | WandB integration with training curves, sample videos, eval videos |
+| 🔁 EMA | Exponential moving average with configurable decay & update interval |
+| 🧩 LoRA | PEFT LoRA with configurable rank, alpha, and target modules |
+| 🔒 Reproducibility | Deterministic seeding with `SEED_EPOCH_STRIDE` for all stochastic ops |
 
+---
+
+<!-- ## 📝 Citation -->
+
+<!-- ```bibtex -->
+<!-- @article{genrl2026, -->
+<!--   title={GenRL: Reinforcement Learning Framework for Visual Generation}, -->
+<!--   author={}, -->
+<!--   year={2026} -->
+<!-- } -->
+<!-- ``` -->
+
+<!-- ## 🙏 Acknowledgements -->
+
+<!-- TODO: Add acknowledgements -->
+
+## 📄 License
+
+<!-- TODO: Add license info -->
+
+---
+
+<div align="center">
+
+**If you find GenRL useful, please give us a ⭐!**
+
+</div>
