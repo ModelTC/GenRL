@@ -33,6 +33,7 @@
 - 🎯 **Unified RL for Visual Generation** — A single framework covering text-to-image (T2I), text-to-video (T2V), and image-to-video (I2V) generation
 - 🔄 **Multi-Paradigm Support** — Native support for both **Diffusion** and **Rectified Flow** generation paradigms via unified SDE formulation
 - 🧩 **Modular Reward System** — Plug-and-play reward functions: aesthetic scores, text-alignment, motion quality, OCR accuracy, and custom user-defined rewards
+- 📝 **High-Quality Training Data** — Carefully curated **~200k filtered prompts** for optimal RL training performance
 - ⚡ **Scalable & Efficient** — Multi-node FSDP training with activation checkpointing, LoRA / full fine-tune, EMA, 8-bit Adam, and memory-efficient reward model offloading
 - 🎛️ **YAML-Driven Configuration** — Everything from model choice, reward weights, training schedule to FSDP sharding strategy is controlled via a single YAML config
 - 🔬 **Reproducible by Design** — Deterministic seeding across sampling, training, and logging for bit-exact experiment reproduction
@@ -136,7 +137,7 @@
 
 </div>
 
-**LongCat Reproduction**: Our GenRL implementation successfully reproduces **LongCat** (not yet open-sourced) on the **Wan2.1-T2V 1.3B** model. Training with **64 H100 GPUs** up to **1.5k steps**, all four reward metrics continue to improve normally, demonstrating stable and effective multi-reward RLHF training.
+**LongCat Reproduction**: Our GenRL implementation successfully reproduces **LongCat** (not yet open-sourced) on the **Wan2.1-T2V 1.3B** model. Training with **64 H100 GPUs** up to **1.5k steps**, all four reward metrics continue to improve normally, demonstrating stable and effective multi-reward RLHF training. The training dataset consists of **~200k carefully filtered prompts** (`datasets/filtered_prompts/`), ensuring high-quality training data for optimal RL performance.
 
 ### 📈 Visual Example
 
