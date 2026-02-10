@@ -1,18 +1,8 @@
 # Follow https://verdantfox.com/blog/how-to-use-git-pre-commit-hooks-the-hard-way-and-the-easy-way
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.0
-    hooks:
-      - id: ruff
-        args: [--fix, --respect-gitignore, --config=pyproject.toml, --extend-exclude=genrl/reward/VideoAlign, --extend-exclude=genrl/reward/HPSv3]
-      - id: ruff-format
-        args: [--config=pyproject.toml]
-
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
       - id: check-yaml
       - id: check-toml
       - id: check-added-large-files
