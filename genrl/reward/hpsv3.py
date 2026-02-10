@@ -41,7 +41,7 @@ def set_hpsv3_device(device) -> None:
 
 
 def _extract_reward_scalar(reward) -> float:
-    if isinstance(reward, (list, tuple)) and len(reward) > 0:
+    if isinstance(reward, list | tuple) and len(reward) > 0:
         return float(reward[0])
     if isinstance(reward, torch.Tensor):
         if reward.numel() == 0:

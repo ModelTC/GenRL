@@ -6,6 +6,7 @@ extend-exclude = ["genrl/reward/VideoAlign", "genrl/reward/HPSv3"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "DTZ", "T10", "EM", "ISC", "ICN", "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SIM", "ARG", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "NPY", "RUF"]
 ignore = [
+    "UP038",  # isinstance doesn't support X | Y syntax in older versions
     "PTH",  # Prefer pathlib over os.path (too many changes needed)
     "PLR0913",  # Too many arguments (acceptable for complex functions)
     "PLR0912",  # Too many branches (acceptable for complex logic)

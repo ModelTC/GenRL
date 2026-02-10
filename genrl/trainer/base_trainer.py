@@ -260,7 +260,7 @@ class BaseTrainer(ABC):
                 # Handle Python native types (int, float)
                 # Note: numpy.float64 is a subclass of float, but has dtype attribute
                 # numpy.int64 is NOT a subclass of int, and has dtype attribute
-                elif isinstance(value, (int, float)) and not hasattr(value, "dtype"):
+                elif isinstance(value, int | float) and not hasattr(value, "dtype"):
                     scalar_items[key] = float(value)
                 # Handle numpy scalars (numpy.int64, numpy.float64, etc.)
                 # numpy scalars have .item() method and .dtype attribute

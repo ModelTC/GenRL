@@ -191,7 +191,7 @@ def wan_pipeline_with_logprob(
 ):
     if callback_on_step_end_tensor_inputs is None:
         callback_on_step_end_tensor_inputs = ["latents"]
-    if isinstance(callback_on_step_end, (PipelineCallback, MultiPipelineCallbacks)):
+    if isinstance(callback_on_step_end, PipelineCallback | MultiPipelineCallbacks):
         callback_on_step_end_tensor_inputs = callback_on_step_end.tensor_inputs
 
     self.check_inputs(

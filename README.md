@@ -452,7 +452,7 @@ GenRL is built upon the excellent work of the open-source community. We would li
 
 ## 📄 License
 
-GenRL is licensed under the **Apache License 2.0**.  
+GenRL is licensed under the **Apache License 2.0**.
 See `LICENSE.txt` for the full license text.
 
 ---
