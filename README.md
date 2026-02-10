@@ -171,7 +171,7 @@ pip install flash-attn==2.7.4.post1 --no-build-isolation
 accelerate launch train.py --config config/default.yaml
 
 # Multi-node (8 nodes × 8 GPUs)
-torchrun --nnodes=4 --nproc_per_node=8 \
+torchrun --nnodes=8 --nproc_per_node=8 \
   --rdzv_backend=c10d \
   --rdzv_endpoint=${MASTER_ADDR}:${MASTER_PORT} \
   train.py --config config/longcat.yaml
