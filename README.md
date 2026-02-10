@@ -64,8 +64,10 @@
 | Model | Modality | Parameters | Status |
 |-------|----------|------------|--------|
 | [Wan2.1-T2V](https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B-Diffusers) | Text → Video | 1.3B | ✅ Supported |
-| <!-- model_2 --> | <!-- modality --> | <!-- params --> | 🚧 Coming Soon |
-| <!-- model_3 --> | <!-- modality --> | <!-- params --> | 📋 Planned |
+| [Wan2.1-T2V](https://huggingface.co/Wan-AI/Wan2.1-T2V-14B-Diffusers) | Text → Video | 14B | ✅ Supported |
+| [Wan2.2-T2V](https://huggingface.co/Wan-AI/Wan2.2-I2V-A14B-Diffusers) | Text → Video | 14B | 🚧 Coming Soon |
+| [Wan2.2-I2V](https://huggingface.co/Wan-AI/Wan2.2-I2V-A14B-Diffusers) | Image → Video | 14B | 🚧 Coming Soon |
+| [HunyuanImage-3.0-Instruct](https://huggingface.co/tencent/HunyuanImage-3.0-Instruct) | Image → Image | 80B | 🚧 Coming Soon |
 
 ---
 
@@ -168,7 +170,7 @@ pip install flash-attn==2.7.4.post1 --no-build-isolation
 # Single node, 8 GPUs (LoRA + FSDP)
 accelerate launch train.py --config config/default.yaml
 
-# Multi-node (4 nodes × 8 GPUs)
+# Multi-node (8 nodes × 8 GPUs)
 torchrun --nnodes=4 --nproc_per_node=8 \
   --rdzv_backend=c10d \
   --rdzv_endpoint=${MASTER_ADDR}:${MASTER_PORT} \
@@ -183,8 +185,8 @@ torchrun --nnodes=4 --nproc_per_node=8 \
 GenRL/
 ├── 🚀 train.py                        # Entry point
 ├── 📁 config/                          # YAML configs
-│   ├── default.yaml                    #   Default (OCR, single-node)
-│   └── longcat.yaml                    #   Multi-reward, multi-node
+│   ├── default.yaml                    #   Default (OCR, FlowGRPO)
+│   └── longcat.yaml                    #   Multi-reward, LongCat
 ├── 📁 genrl/
 │   ├── config.py                       # Config schema & loader
 │   ├── constants.py                    # Global constants
@@ -314,9 +316,28 @@ logs/
 <!-- } -->
 <!-- ``` -->
 
-<!-- ## 🙏 Acknowledgements -->
+## 📝 TODO
 
-<!-- TODO: Add acknowledgements -->
+- **Model support**
+  - Extend support for more text-to-image / image-to-image backbones beyond the current Wan / Hunyuan family
+- **Algorithmic extensions**
+  - Integrate more **GRPO-family** variants and related online RL algorithms
+  - Add DPO / OnlineDPO, SFT / OnlineSFT style objectives alongside GRPO-style training
+- **Rollout & parallelism**
+  - Integrate **LightX2V** inference framework for accelerated rollout
+  - Multi-level parallel rollout (e.g., **SP**, **HSDP**) for better hardware utilization
+  - **Asynchronous rollout** workers with decoupled sampling/training pipelines
+  - Improved multi-node orchestration utilities and monitoring for large-scale runs
+
+---
+
+## 🙏 Acknowledgements
+
+GenRL is built upon the excellent work of the open-source community. We would like to thank:
+
+- **[Flow-GRPO](https://github.com/yifan123/flow_grpo)** — We reference their implementation for the GRPO-based algorithm and training framework.
+
+---
 
 ## 📄 License
 
