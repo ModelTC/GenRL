@@ -109,7 +109,7 @@
 
 **Performance Comparison**: Under the same settings (using `config/default.yaml` with **8 GPU training**), the original FlowGRPO repository reaches an OCR score of approximately **0.28** at around **3k steps**, while our GenRL implementation achieves an OCR score close to **0.3** at only **1.2k steps**, demonstrating superior training efficiency and convergence.
 
-### 🎬 LongCat Multi-Reward Training
+### 📊 LongCat Multi-Reward Training
 
 <div align="center">
 
@@ -137,6 +137,20 @@
 </div>
 
 **LongCat Reproduction**: Our GenRL implementation successfully reproduces **LongCat** (not yet open-sourced) on the **Wan2.1-T2V 1.3B** model. Training with **64 H100 GPUs** up to **1.5k steps**, all four reward metrics continue to improve normally, demonstrating stable and effective multi-reward RLHF training.
+
+### 📈 Visual Example
+
+The following video demonstrates the quality improvement achieved by GenRL training:
+
+<div align="center">
+
+https://github.com/user-attachments/assets/074d4b77-67b9-475f-a0c4-beb1f5168890
+
+</div>
+
+**Video Layout**: The video consists of 8 sub-videos arranged in a 2×4 grid:
+- **Top row (4 videos)**: Baseline results from **Wan-AI/Wan2.1-T2V-1.3B-Diffusers** (pretrained model)
+- **Bottom row (4 videos)**: Results from our **GenRL LongCat** implementation after **1.5k steps** of RL training on the same model
 
 ---
 
@@ -429,7 +443,7 @@ logs/
 
 GenRL is built upon the excellent work of the open-source community. We would like to thank:
 
-- **[Flow-GRPO](https://github.com/yifan123/flow_grpo)** — We reference their implementation for the GRPO-based algorithm and training framework.
+- **[FlowGRPO](https://github.com/yifan123/flow_grpo)** — We reference their implementation for the GRPO-based algorithm and training framework.
 
 ---
 
