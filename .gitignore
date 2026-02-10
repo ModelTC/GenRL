@@ -63,6 +63,7 @@ debug_tensor*/
 *.ico
 *.svg
 *.webp
+!assets/logo.webp
 assets/svg_tensors*
 
 
