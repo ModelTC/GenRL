@@ -6,7 +6,7 @@ repos:
       - id: ruff
         args: [--fix, --respect-gitignore, --config=pyproject.toml, --extend-exclude=genrl/reward/VideoAlign, --extend-exclude=genrl/reward/HPSv3]
       - id: ruff-format
-        args: [--config=pyproject.toml, --extend-exclude=genrl/reward/VideoAlign, --extend-exclude=genrl/reward/HPSv3]
+        args: [--config=pyproject.toml]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
