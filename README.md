@@ -259,7 +259,7 @@ output = pipe(
 export_to_video(output, "output.mp4", fps=15)
 ```
 
-**Using LightX2V** (for accelerated inference):
+**Using [LightX2V](https://github.com/ModelTC/LightX2V)** (for accelerated inference):
 
 ```python
 import torch
@@ -283,9 +283,9 @@ merged_model_path = "path/to/merged_model"
 pipe.save_pretrained(merged_model_path)
 ```
 
-After merging, you can directly use **LightX2V** for accelerated inference. See the [LightX2V inference script](https://github.com/ModelTC/LightX2V/blob/main/scripts/wan/run_wan_t2v.sh) for example usage.
+After merging, you can directly use **[LightX2V](https://github.com/ModelTC/LightX2V)** for accelerated inference. See the [LightX2V inference script](https://github.com/ModelTC/LightX2V/blob/main/scripts/wan/run_wan_t2v.sh) for example usage.
 
-> 💡 **Note**: LoRA adapters saved by GenRL are fully compatible with the PEFT library, allowing seamless integration with standard diffusers workflows and third-party inference frameworks like LightX2V.
+> 💡 **Note**: LoRA adapters saved by GenRL are fully compatible with the PEFT library, allowing seamless integration with standard diffusers workflows and third-party inference frameworks like [LightX2V](https://github.com/ModelTC/LightX2V).
 
 ---
 
@@ -434,7 +434,7 @@ logs/
   - Integrate more **GRPO-family** variants and related online RL algorithms
   - Add DPO / OnlineDPO, SFT / OnlineSFT style objectives alongside GRPO-style training
 - **Rollout & parallelism**
-  - Integrate **LightX2V** inference framework for accelerated rollout
+  - Integrate **[LightX2V](https://github.com/ModelTC/LightX2V)** inference framework for accelerated rollout
   - Multi-level parallel rollout (e.g., **SP**, **HSDP**) for better hardware utilization
   - **Asynchronous rollout** workers with decoupled sampling/training pipelines
   - Improved multi-node orchestration utilities and monitoring for large-scale runs
