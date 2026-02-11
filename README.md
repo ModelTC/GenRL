@@ -431,7 +431,7 @@ logs/
 
 ## 🏛️ Model Zoo
 
-We provide pre-trained LoRA checkpoints fine-tuned with LongCat on the Wan2.1-T2V-1.3B model.
+We provide LoRA checkpoints fine-tuned with reinforcement learning (GRPO) on the Wan2.1-T2V-1.3B model. More checkpoints will be released soon.
 
 | Model | Steps | LoRA Rank | HuggingFace |
 |-------|-------|-----------|-------------|
