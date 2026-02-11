@@ -419,15 +419,20 @@ logs/
 
 ---
 
-<!-- ## 📝 Citation -->
+## 📝 Citation
 
-<!-- ```bibtex -->
-<!-- @article{genrl2026, -->
-<!--   title={GenRL: Reinforcement Learning Framework for Visual Generation}, -->
-<!--   author={}, -->
-<!--   year={2026} -->
-<!-- } -->
-<!-- ``` -->
+If you find GenRL useful in your research, please cite:
+
+```bibtex
+@misc{genrl,
+  author = {GenRL Contributors},
+  title = {GenRL: Reinforcement Learning Framework for Visual Generation},
+  year = {2026},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/ModelTC/GenRL}},
+}
+```
 
 ---
 
