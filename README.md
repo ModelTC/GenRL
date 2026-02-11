@@ -419,23 +419,6 @@ logs/
 
 ---
 
-## 📝 Citation
-
-If you find GenRL useful in your research, please cite:
-
-```bibtex
-@misc{genrl,
-  author = {GenRL Contributors},
-  title = {GenRL: Reinforcement Learning Framework for Visual Generation},
-  year = {2026},
-  publisher = {GitHub},
-  journal = {GitHub repository},
-  howpublished = {\url{https://github.com/ModelTC/GenRL}},
-}
-```
-
----
-
 ## 🏛️ Model Zoo
 
 We provide LoRA checkpoints fine-tuned with reinforcement learning (GRPO) on the Wan2.1-T2V-1.3B model. More checkpoints will be released soon.
@@ -475,6 +458,23 @@ GenRL is built upon the excellent work of the open-source community. We would li
 
 GenRL is licensed under the **Apache License 2.0**.
 See `LICENSE.txt` for the full license text.
+
+---
+
+## 📝 Citation
+
+If you find GenRL useful in your research, please cite:
+
+```bibtex
+@misc{genrl,
+  author = {GenRL Contributors},
+  title = {GenRL: Reinforcement Learning Framework for Visual Generation},
+  year = {2026},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/ModelTC/GenRL}},
+}
+```
 
 ---
 
