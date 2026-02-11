@@ -15,6 +15,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.6](https://img.shields.io/badge/pytorch-2.6-ee4c2c.svg)](https://pytorch.org/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-orange.svg)](LICENSE.txt)
+[![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Models-yellow)](https://huggingface.co/collections/lightx2v/genrl)
 <!-- [![arXiv](https://img.shields.io/badge/arXiv-xxxx.xxxxx-b31b1b.svg)](https://arxiv.org/abs/xxxx.xxxxx) -->
 
 <!-- TODO: Add a teaser image / GIF here -->
@@ -31,6 +32,7 @@
 ## ✨ Highlights
 
 - 🎯 **Unified RL for Visual Generation** — A single framework covering text-to-image (T2I), text-to-video (T2V), and image-to-video (I2V) generation
+- 🏆 **Production-Ready Models** — [High-performance RL-trained checkpoints](https://huggingface.co/collections/lightx2v/genrl) available on HuggingFace, optimized for aesthetic quality, motion coherence, and text alignment
 - 🔄 **Multi-Paradigm Support** — Native support for both **Diffusion** and **Rectified Flow** generation paradigms via unified SDE formulation
 - 🧩 **Modular Reward System** — Plug-and-play reward functions: aesthetic scores, text-alignment, motion quality, OCR accuracy, and custom user-defined rewards
 - 📝 **High-Quality Training Data** — Carefully curated **~200k filtered prompts** for optimal RL training performance
