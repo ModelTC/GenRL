@@ -427,6 +427,20 @@ logs/
 <!-- } -->
 <!-- ``` -->
 
+---
+
+## 🏛️ Model Zoo
+
+We provide pre-trained LoRA checkpoints fine-tuned with LongCat on the Wan2.1-T2V-1.3B model.
+
+| Model | Steps | LoRA Rank | HuggingFace |
+|-------|-------|-----------|-------------|
+| **Wan2.1-T2V-1.3B-longcat-step500** | 500 | 128 | 🤗 [Link](https://huggingface.co/lightx2v/Wan2.1-T2V-1.3B-longcat-step500) |
+| **Wan2.1-T2V-1.3B-longcat-step1000** | 1000 | 128 | 🤗 [Link](https://huggingface.co/lightx2v/Wan2.1-T2V-1.3B-longcat-step1000) |
+| **Wan2.1-T2V-1.3B-longcat-step1500** | 1500 | 128 | 🤗 [Link](https://huggingface.co/lightx2v/Wan2.1-T2V-1.3B-longcat-step1500) |
+
+---
+
 ## 📝 TODO
 
 - **Model support**
