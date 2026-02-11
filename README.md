@@ -23,7 +23,7 @@
 
 **GenRL** is a scalable, modular reinforcement learning framework for optimizing visual generation models — from images to videos — with plug-and-play reward functions, multi-GPU distributed training, and first-class support for diffusion & flow-based generators.
 
-[🚀 Getting Started](#-getting-started) · [📖 Algorithms](#-supported-algorithms) · [📊 Performance](#-performance) · [🏗️ Architecture](#️-architecture)
+[🚀 Getting Started](#-getting-started) · [📖 Algorithms](#-supported-algorithms) · [🏛️ Model Zoo](#️-model-zoo) · [📊 Performance](#-performance) · [🏗️ Architecture](#️-architecture)
 
 </div>
 
