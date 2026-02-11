@@ -388,8 +388,15 @@ logs/
     └── <run_name>_<timestamp>/
         ├── 📁 checkpoints/                    # Periodic checkpoints
         │   └── checkpoint-{step}/
-        │       ├── ema/                        # EMA states
-        │       ├── unwrapped_model/transformer/ # Model weights
+        │       ├── ema/                        # EMA states (if enabled)
+        │       ├── unwrapped_model/            # Model weights
+        │       │   └── transformer/
+        │       │       ├── adapter_config.json         # LoRA config (if LoRA)
+        │       │       ├── adapter_model.safetensors   # LoRA weights (if LoRA)
+        │       │       └── README.md                   # Model card
+        │       ├── optimizer_0/                # Optimizer states (for resuming)
+        │       ├── pytorch_model_fsdp_0/       # FSDP sharded model states
+        │       ├── random_states_*.pkl         # Random states for each rank (for reproducibility)
         │       └── metadata.json               # Step & config metadata
         ├── 📁 final_model/                    # Final trained model
         │   └── transformer/
