@@ -166,6 +166,29 @@ The following video demonstrates the quality improvement achieved by GenRL train
 - Python 3.10+
 - CUDA 12.x + PyTorch 2.6
 - 8× A100/H100 GPUs (recommended for video training)
+- **Git LFS** (required for downloading large dataset files)
+
+### 0️⃣ Clone Repository
+
+**Important**: This repository uses Git LFS for large dataset files. Make sure Git LFS is installed before cloning.
+
+```bash
+# Install Git LFS (if not already installed)
+# Ubuntu/Debian
+sudo apt-get install git-lfs
+
+# macOS
+brew install git-lfs
+
+# Initialize Git LFS
+git lfs install
+
+# Clone the repository (Git LFS will automatically download large files)
+git clone https://github.com/ModelTC/GenRL.git
+cd GenRL
+```
+
+> 💡 **Note**: The `datasets/filtered_prompts/` directory contains large JSON files (~300MB) stored with Git LFS. If you encounter download issues, you can manually pull LFS files with `git lfs pull`.
 
 ### 1️⃣ Install Dependencies
 
